@@ -1,0 +1,17 @@
+{
+  "item.bestflashlight.flashlight": "Фонарик",
+  "item.bestflashlight.headband": "Налобное крепление",
+  "block.bestflashlight.flashlight_light": "Свет фонарика",
+  "key.bestflashlight.toggle": "Переключить налобный фонарь",
+  "key.categories.bestflashlight": "Flashlight FE",
+  "tooltip.bestflashlight.energy": "Заряд: %s/%s FE",
+  "tooltip.bestflashlight.on": "Свет включён",
+  "tooltip.bestflashlight.off": "Свет выключен",
+  "tooltip.bestflashlight.headband.mount": "Установка: крепление + фонарик в любых ячейках верстака",
+  "tooltip.bestflashlight.headband.loaded": "Фонарик установлен",
+  "tooltip.bestflashlight.headband.unmount": "Снятие: положите крепление одно в сетку крафта",
+  "jei.bestflashlight.headband.mounting": "Налобный фонарь: положите пустое налобное крепление и фонарик в любые две ячейки верстака. Положение предметов не важно. Чтобы снять фонарик, положите собранное налобное крепление одно в сетку крафта.",
+  "message.bestflashlight.on": "Фонарик включён",
+  "message.bestflashlight.off": "Фонарик выключен",
+  "key.bestflashlight.handheld": "Переключить ручной фонарь"
+}

@@ -1,0 +1,154 @@
+name: Build and release
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize release state across commits and manual retries. Never cancel an upload.
+concurrency:
+  group: flashlight-fe-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Test release safeguards (including private/disabled builds)
+        run: python3 -m unittest discover -s scripts -p 'release_test.py'
+      - name: Build and compile smoke tests
+        run: ./gradlew --no-daemon build smokeClasses
+      - name: Validate version, changelog, metadata and production JAR
+        run: python3 scripts/release.py validate
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-candidate
+          path: build/libs/flashlight-fe-*.jar
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: build
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      vars.PUBLISH_ENABLED == 'true' && github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED }}
+      MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
+      CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-candidate
+          path: build/libs
+      - name: Check both publishing tokens
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          test -n "$MODRINTH_TOKEN" || { echo 'Missing MODRINTH_TOKEN'; exit 1; }
+          test -n "$CURSEFORGE_TOKEN" || { echo 'Missing CURSEFORGE_TOKEN'; exit 1; }
+      - name: Create or recover immutable release artifact
+        id: prepare
+        run: python3 scripts/release.py prepare
+      - name: Record Modrinth upload intent
+        id: modrinth_intent
+        if: steps.prepare.outputs.modrinth == 'pending'
+        run: python3 scripts/release.py inflight --platform modrinth
+      - name: Publish original JAR to Modrinth
+        id: modrinth
+        if: steps.modrinth_intent.outcome == 'success'
+        continue-on-error: true
+        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          modrinth-id: ${{ vars.MODRINTH_PROJECT_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: ${{ steps.prepare.outputs.jar }}
+          name: Flashlight FE ${{ steps.prepare.outputs.version }}
+          version: ${{ steps.prepare.outputs.version }}
+          version-type: release
+          changelog-file: release-artifact/changelog.md
+          loaders: neoforge
+          game-versions: '1.21.1'
+          java: '21'
+          environment: |
+            client
+            server
+          # Verified api.modrinth.com/v2/project/{curios,jei}, 2026-09-15.
+          modrinth-dependencies: |
+            vvuO3ImH(required)
+            u6dRKJwZ(optional)
+          # maxAttempts=1: no retry after a potentially accepted upload.
+          retry-attempts: 1
+          fail-mode: fail
+      - name: Persist Modrinth success receipt
+        id: modrinth_receipt
+        if: steps.modrinth.outcome == 'success'
+        env:
+          PROVIDER_ID: ${{ steps.modrinth.outputs.modrinth-version }}
+        run: python3 scripts/release.py published --platform modrinth
+      - name: Record CurseForge upload intent
+        id: curseforge_intent
+        if: ${{ !cancelled() && steps.prepare.outputs.curseforge == 'pending' }}
+        run: python3 scripts/release.py inflight --platform curseforge
+      - name: Publish original JAR to CurseForge
+        id: curseforge
+        if: ${{ !cancelled() && steps.curseforge_intent.outcome == 'success' }}
+        continue-on-error: true
+        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3
+        with:
+          curseforge-id: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: ${{ steps.prepare.outputs.jar }}
+          name: Flashlight FE ${{ steps.prepare.outputs.version }}
+          version: ${{ steps.prepare.outputs.version }}
+          version-type: release
+          changelog-file: release-artifact/changelog.md
+          loaders: neoforge
+          game-versions: '1.21.1'
+          java: '21'
+          environment: |
+            client
+            server
+          # Verified official curseforge.com projects /curios and /jei, 2026-09-15.
+          curseforge-dependencies: |
+            309927(required)
+            238222(optional)
+          retry-attempts: 1
+          fail-mode: fail
+      - name: Persist CurseForge success receipt
+        id: curseforge_receipt
+        if: ${{ !cancelled() && steps.curseforge.outcome == 'success' }}
+        env:
+          PROVIDER_ID: ${{ steps.curseforge.outputs.curseforge-version }}
+        run: python3 scripts/release.py published --platform curseforge
+      - name: Require both platform receipts
+        if: >-
+          !cancelled() && steps.prepare.outcome == 'success' &&
+          ((steps.prepare.outputs.modrinth == 'pending' && steps.modrinth_receipt.outcome != 'success') ||
+           (steps.prepare.outputs.curseforge == 'pending' && steps.curseforge_receipt.outcome != 'success'))
+        run: |
+          echo 'Publication incomplete. Preserve release assets. See recovery instructions in scripts/release.py.'
+          exit 1

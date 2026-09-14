@@ -1,0 +1,11 @@
+{
+  "parent": "bestflashlight:item/headband_empty",
+  "overrides": [
+    {
+      "predicate": {
+        "bestflashlight:mounted": 1
+      },
+      "model": "bestflashlight:item/headband_loaded"
+    }
+  ]
+}

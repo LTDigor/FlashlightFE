@@ -1,0 +1,11 @@
+.gradle/
+build/
+run*/
+.idea/
+*.iml
+.superpowers/
+libs/
+.DS_Store
+
+__pycache__/
+*.pyc
