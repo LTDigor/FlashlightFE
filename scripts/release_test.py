@@ -100,6 +100,67 @@ class ReleaseTests(unittest.TestCase):
             release.validate_manifest(manifest, '1.2.3', {'modrinth': 'other'}, data)
 
 
+class PublishingGuardTests(unittest.TestCase):
+    def setUp(self):
+        self.environment = patch.dict(os.environ, {
+            'GITHUB_REPOSITORY': 'owner/repo',
+            'GITHUB_REF': 'refs/heads/master',
+            'GITHUB_EVENT_NAME': 'push',
+            'PUBLISH_ENABLED': 'true',
+        }, clear=True)
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+        self.api_patch = patch.object(release, 'api', return_value={'visibility': 'public'})
+        self.api = self.api_patch.start()
+        self.addCleanup(self.api_patch.stop)
+
+    def test_public_master_push_and_dispatch_allowed(self):
+        for event in ('push', 'workflow_dispatch'):
+            with self.subTest(event=event), patch.dict(os.environ, {'GITHUB_EVENT_NAME': event}):
+                self.assertEqual(release.guard(), 'owner/repo')
+        self.assertEqual(self.api.call_count, 2)
+        self.api.assert_called_with('repos/owner/repo')
+
+    def test_private_internal_and_unknown_visibility_denied(self):
+        for visibility in ('private', 'internal', None):
+            with self.subTest(visibility=visibility):
+                self.api.return_value = {'visibility': visibility}
+                with self.assertRaisesRegex(ValueError, 'Publishing requires'):
+                    release.guard()
+        self.api.return_value = {}
+        with self.assertRaises(ValueError):
+            release.guard()
+
+    def test_disabled_missing_and_nonexact_opt_in_denied(self):
+        for enabled in ('false', '', 'TRUE', '1'):
+            with self.subTest(enabled=enabled), patch.dict(os.environ, {'PUBLISH_ENABLED': enabled}):
+                with self.assertRaises(ValueError):
+                    release.guard()
+        del os.environ['PUBLISH_ENABLED']
+        with self.assertRaises(ValueError):
+            release.guard()
+        self.api.assert_not_called()
+
+    def test_nonmaster_branches_and_tags_denied(self):
+        for ref in ('refs/heads/main', 'refs/heads/feature', 'refs/tags/v1.2.3', ''):
+            with self.subTest(ref=ref), patch.dict(os.environ, {'GITHUB_REF': ref}):
+                with self.assertRaises(ValueError):
+                    release.guard()
+        self.api.assert_not_called()
+
+    def test_pull_requests_and_other_events_denied_even_on_master(self):
+        for event in ('pull_request', 'pull_request_target', 'release', 'schedule', ''):
+            with self.subTest(event=event), patch.dict(os.environ, {'GITHUB_EVENT_NAME': event}):
+                with self.assertRaises(ValueError):
+                    release.guard()
+        self.api.assert_not_called()
+
+    def test_repository_lookup_failure_denied(self):
+        self.api.side_effect = RuntimeError('Repository lookup unavailable')
+        with self.assertRaisesRegex(RuntimeError, 'Repository lookup unavailable'):
+            release.guard()
+
+
 class LedgerIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -152,6 +213,17 @@ class LedgerIntegrationTests(unittest.TestCase):
         path = directory / name
         path.write_bytes(self.assets[name])
         return path
+
+    def test_missing_project_id_fails_clearly_before_release_side_effects(self):
+        for platform in release.PLATFORMS:
+            with self.subTest(platform=platform), patch.dict(os.environ):
+                del os.environ[platform.upper() + '_PROJECT_ID']
+                with self.assertRaisesRegex(ValueError, 'Both provider project IDs must be configured'):
+                    release.prepare()
+                self.assertEqual(self.calls, [])
+                self.assertEqual(self.releases, [])
+                self.assertEqual(self.assets, {})
+                self.assertFalse(Path('release-artifact').exists())
 
     def test_partial_retry_uses_original_bytes_then_complete_skips(self):
         release.prepare()

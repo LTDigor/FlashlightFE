@@ -6,7 +6,8 @@ and sound events by identifier.
 
 NeoForge, Curios, JEI and other dependencies retain their respective licenses
 and are distributed separately. The Gradle Wrapper bootstrap is distributed
-under the Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
+under the Apache License 2.0. Its license and distribution notices are
+preserved in gradle/wrapper/LICENSE and gradle/wrapper/NOTICE.
 
 This repository does not include the history or code tree of the earlier
 private flashlight derivative. Its license is not changed by this release.

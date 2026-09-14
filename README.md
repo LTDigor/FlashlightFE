@@ -65,6 +65,8 @@ This repository contains the standalone implementation under the [MIT License](L
 
 Releases are published from `master` after review. Set `mod_version` in `gradle.properties` and add the matching section to `CHANGELOG.md`, then push. The release workflow builds the exact commit and uploads the same JAR to GitHub, CurseForge and Modrinth. A version already released is never overwritten. Repository variable `PUBLISH_ENABLED` must be `true`; publication is blocked while the repository is private.
 
+If an upload times out, the workflow preserves an upload-intent receipt and stops automatic retries for that platform. Check the provider account, including files awaiting moderation, against the original release artifact before recovery. See the recovery instructions in [`scripts/release.py`](scripts/release.py). Successful uploads and their artifacts must not be replaced.
+
 ## Development
 
 Use JDK 21 and import the Gradle project in IntelliJ IDEA.

@@ -28,7 +28,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Test release safeguards (including private/disabled builds)
-        run: python3 -m unittest discover -s scripts -p 'release_test.py'
+        run: python3 -m unittest discover -s scripts -p '*_test.py'
       - name: Build and compile smoke tests
         run: ./gradlew --no-daemon build smokeClasses
       - name: Validate version, changelog, metadata and production JAR

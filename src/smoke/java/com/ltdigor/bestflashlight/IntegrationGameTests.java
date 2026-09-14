@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
@@ -47,6 +48,7 @@ public class IntegrationGameTests {
     public static void tickSelectionConsumesExactlyOneSource(GameTestHelper helper) {
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(), new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fe-test"));
         try {
+            player.setGameMode(GameType.SURVIVAL);
             player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
             ItemStack main = lamp(3), off = lamp(20);
             LampData.setEnabled(main, true); LampData.setEnabled(off, true);
@@ -71,6 +73,7 @@ public class IntegrationGameTests {
     public static void curiosHeadSlotEmitsWithFreeHands(GameTestHelper helper) {
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(), new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fe-test"));
         try {
+            player.setGameMode(GameType.SURVIVAL);
             var inventory = CuriosApi.getCuriosInventory(player).orElseThrow();
             var head = inventory.getCurios().get("head");
             helper.assertTrue(head != null && head.getStacks().getSlots() == 1, "Player must receive one Curios head slot");
@@ -88,8 +91,11 @@ public class IntegrationGameTests {
 
     @GameTest(template = "empty", batch = "config")
     public static void waterDisabledAndZeroCostBehave(GameTestHelper helper) {
+        boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
+        int originalEnergyPerTick = FlashlightConfig.ENERGY_PER_TICK.get();
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(), new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fe-test"));
         try {
+            player.setGameMode(GameType.SURVIVAL);
             player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
             for (int x=6;x<=10;x++) for(int y=1;y<=4;y++) for(int z=1;z<=6;z++) helper.setBlock(x,y,z,Blocks.WATER);
             ItemStack item = lamp(100); LampData.setEnabled(item,true); player.setItemSlot(EquipmentSlot.MAINHAND,item);
@@ -103,7 +109,11 @@ public class IntegrationGameTests {
             ItemStack empty=lamp(0); LampData.setEnabled(empty,true);
             helper.assertTrue(LampEnergy.consume(empty) && LampEnergy.stored(empty)==0, "Zero cost permits empty battery without underflow");
         } finally {
-            FlashlightConfig.WORKS_UNDERWATER.set(true); FlashlightConfig.WORKS_UNDERWATER.clearCache(); FlashlightConfig.ENERGY_PER_TICK.set(1); FlashlightConfig.ENERGY_PER_TICK.clearCache(); remove(helper,player);
+            FlashlightConfig.WORKS_UNDERWATER.set(originalWorksUnderwater);
+            FlashlightConfig.WORKS_UNDERWATER.clearCache();
+            FlashlightConfig.ENERGY_PER_TICK.set(originalEnergyPerTick);
+            FlashlightConfig.ENERGY_PER_TICK.clearCache();
+            remove(helper,player);
         }
         helper.succeed();
     }
@@ -112,6 +122,7 @@ public class IntegrationGameTests {
     public static void deathDimensionLogoutClearOwnedLight(GameTestHelper helper) {
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(), new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fe-test"));
         try {
+            player.setGameMode(GameType.SURVIVAL);
             player.setPos(helper.absolutePos(new BlockPos(8,1,3)).getCenter());
             ItemStack lamp=lamp(100); LampData.setEnabled(lamp,true); player.setItemSlot(EquipmentSlot.MAINHAND,lamp);
             for (int reason=0;reason<3;reason++) {
@@ -136,6 +147,7 @@ public class IntegrationGameTests {
         var player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
             new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "pane-test"));
         try {
+            player.setGameMode(GameType.SURVIVAL);
             var pane = Blocks.GLASS_PANE.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST, true)
                 .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WEST, true);

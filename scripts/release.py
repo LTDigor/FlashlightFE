@@ -163,7 +163,7 @@ def prepare():
     repo = guard()
     version = read_version()
     tag = f'v{version}'
-    projects = {p: os.environ[p.upper() + '_PROJECT_ID'] for p in PLATFORMS}
+    projects = {p: os.environ.get(p.upper() + '_PROJECT_ID', '') for p in PLATFORMS}
     if not re.fullmatch(r'\d+', projects['curseforge']) or not re.fullmatch(r'[A-Za-z0-9]+', projects['modrinth']):
         raise ValueError('Both provider project IDs must be configured')
     pages = json.loads(gh('api', '--paginate', '--slurp', f'repos/{repo}/releases?per_page=100'))

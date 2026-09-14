@@ -45,10 +45,11 @@ public final class MultiplayerClientSmoke {
             synchronizedBand=true;
             LogUtils.getLogger().info("FLASHLIGHT_REMOTE_CLIENT_PASS: {} Curios battery synchronized",mc.player.getName().getString());
         }
-        if (mc.player != null && PRESS_OWNERS.size() == 2) {
+        if (mc.player != null && !PRESS_OWNERS.isEmpty()) {
             PRESS_OWNERS.stream().filter(owner -> ButtonAnimation.offset(owner, InteractionHand.MAIN_HAND, true) < -.35)
                 .forEach(MOVING_OWNERS::add);
-            if (!logged && localPress && remotePress && MOVING_OWNERS.containsAll(PRESS_OWNERS)) {
+            if (!logged && localPress && remotePress && PRESS_OWNERS.size() == 2
+                    && MOVING_OWNERS.containsAll(PRESS_OWNERS)) {
                 logged = true;
                 LogUtils.getLogger().info("FLASHLIGHT_PRESS_CLIENT_PASS: {} received sender and tracking press animations", mc.player.getName().getString());
             }

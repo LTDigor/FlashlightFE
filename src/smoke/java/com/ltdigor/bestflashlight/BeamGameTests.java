@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -28,6 +29,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 public class BeamGameTests {
     @GameTest(template = "empty", batch = "beam_underwater")
     public static void submergedHandEmitterDoesNotDrainWithEyeInAir(GameTestHelper helper) {
+        boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
         ServerLevel level = helper.getLevel();
         Vec3 feet = helper.absoluteVec(new Vec3(8.5, 1.48, 3.5));
         ServerPlayer player = geometryPlayer(level, feet);
@@ -46,7 +48,7 @@ public class BeamGameTests {
             helper.assertTrue(LampEnergy.stored(lamp) == 20, "Submerged hand emitter must not consume energy when the player's eye is in air");
             helper.assertTrue(countTemporaryLights(helper) == 0, "Submerged hand emitter must not create light when underwater use is disabled");
         } finally {
-            FlashlightConfig.WORKS_UNDERWATER.set(true);
+            FlashlightConfig.WORKS_UNDERWATER.set(originalWorksUnderwater);
             FlashlightConfig.WORKS_UNDERWATER.clearCache();
             FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
             player.discard();
@@ -70,6 +72,8 @@ public class BeamGameTests {
 
     @GameTest(template = "empty", batch = "beam_off_axis")
     public static void offAxisObstacleBlocksOnlyItsOuterRingRay(GameTestHelper helper) {
+        double originalRange = FlashlightConfig.BEAM_RANGE.get();
+        double originalAngle = FlashlightConfig.CONE_ANGLE_DEGREES.get();
         ServerLevel level = helper.getLevel();
         Vec3 origin = helper.absoluteVec(new Vec3(8.5, 2.5, 2.5));
         ServerPlayer player = geometryPlayer(level, origin);
@@ -86,7 +90,7 @@ public class BeamGameTests {
             helper.assertTrue(beam.containsKey(farCenter), "Off-axis obstacle must leave the far center ray open");
             helper.assertTrue(beam.containsKey(openOuter), "Off-axis obstacle must leave the opposite outer-ring ray open");
         } finally {
-            restoreBeamConfig();
+            setBeamConfig(originalRange, originalAngle);
             player.discard();
         }
         helper.succeed();
@@ -94,6 +98,8 @@ public class BeamGameTests {
 
     @GameTest(template = "empty", batch = "beam_wall")
     public static void solidWallBlocksAllBeamCandidatesBehindIt(GameTestHelper helper) {
+        double originalRange = FlashlightConfig.BEAM_RANGE.get();
+        double originalAngle = FlashlightConfig.CONE_ANGLE_DEGREES.get();
         ServerLevel level = helper.getLevel();
         Vec3 origin = helper.absoluteVec(new Vec3(8.5, 2.5, 2.5));
         ServerPlayer player = geometryPlayer(level, origin);
@@ -117,7 +123,7 @@ public class BeamGameTests {
                 "Solid wall must block every center and ring candidate behind it"
             );
         } finally {
-            restoreBeamConfig();
+            setBeamConfig(originalRange, originalAngle);
             player.discard();
         }
         helper.succeed();
@@ -125,6 +131,8 @@ public class BeamGameTests {
 
     @GameTest(template = "empty", batch = "beam_range")
     public static void configuredRangeLimitsForwardBeamDistance(GameTestHelper helper) {
+        double originalRange = FlashlightConfig.BEAM_RANGE.get();
+        double originalAngle = FlashlightConfig.CONE_ANGLE_DEGREES.get();
         ServerLevel level = helper.getLevel();
         Vec3 origin = helper.absoluteVec(new Vec3(8.5, 2.5, 2.5));
         ServerPlayer player = geometryPlayer(level, origin);
@@ -136,11 +144,12 @@ public class BeamGameTests {
             double shortDistance = maxForwardDistance(shortBeam, origin);
             double longDistance = maxForwardDistance(longBeam, origin);
 
+            helper.assertTrue(!shortBeam.isEmpty(), "Range 4 must still create beam candidates");
             helper.assertTrue(shortDistance <= 4.0, "Range 4 must not create candidates beyond four blocks along the beam");
             helper.assertTrue(longDistance >= 11.0, "Range 12 must create candidates near the far end of the beam");
             helper.assertTrue(longDistance >= shortDistance + 7.0, "Increasing range from 4 to 12 must extend the candidate footprint");
         } finally {
-            restoreBeamConfig();
+            setBeamConfig(originalRange, originalAngle);
             player.discard();
         }
         helper.succeed();
@@ -148,6 +157,8 @@ public class BeamGameTests {
 
     @GameTest(template = "empty", batch = "beam_angle")
     public static void largerFullAngleWidensLateralFootprint(GameTestHelper helper) {
+        double originalRange = FlashlightConfig.BEAM_RANGE.get();
+        double originalAngle = FlashlightConfig.CONE_ANGLE_DEGREES.get();
         ServerLevel level = helper.getLevel();
         Vec3 origin = helper.absoluteVec(new Vec3(8.5, 2.5, 2.5));
         ServerPlayer player = geometryPlayer(level, origin);
@@ -162,7 +173,7 @@ public class BeamGameTests {
             helper.assertTrue(narrowWidth > 0.0, "15-degree full angle must produce a nonzero cone footprint");
             helper.assertTrue(wideWidth >= narrowWidth + 1.0, "30-degree full angle must produce a wider lateral footprint than 15 degrees");
         } finally {
-            restoreBeamConfig();
+            setBeamConfig(originalRange, originalAngle);
             player.discard();
         }
         helper.succeed();
@@ -302,6 +313,7 @@ public class BeamGameTests {
 
     private static ServerPlayer geometryPlayer(ServerLevel level, Vec3 origin) {
         ServerPlayer player = new FakePlayer(level, new GameProfile(UUID.randomUUID(), "beam-geometry"));
+        player.setGameMode(GameType.SURVIVAL);
         player.setPos(origin.x, origin.y, origin.z);
         return player;
     }
@@ -349,10 +361,6 @@ public class BeamGameTests {
         FlashlightConfig.BEAM_RANGE.clearCache();
         FlashlightConfig.CONE_ANGLE_DEGREES.set(fullAngleDegrees);
         FlashlightConfig.CONE_ANGLE_DEGREES.clearCache();
-    }
-
-    private static void restoreBeamConfig() {
-        setBeamConfig(12.0, 15.0);
     }
 
     private static Method findLifecycleMethod(String name, int parameterCount) throws NoSuchMethodException {
