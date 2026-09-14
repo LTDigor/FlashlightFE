@@ -93,9 +93,7 @@ jobs:
           loaders: neoforge
           game-versions: '1.21.1'
           java: '21'
-          environment: |
-            client
-            server
+          environment: both
           # Verified api.modrinth.com/v2/project/{curios,jei}, 2026-09-15.
           modrinth-dependencies: |
             vvuO3ImH(required)
@@ -129,9 +127,7 @@ jobs:
           loaders: neoforge
           game-versions: '1.21.1'
           java: '21'
-          environment: |
-            client
-            server
+          environment: both
           # Verified official curseforge.com projects /curios and /jei, 2026-09-15.
           curseforge-dependencies: |
             309927(required)
