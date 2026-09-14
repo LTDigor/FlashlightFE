@@ -208,7 +208,8 @@ def prepare():
         if fetch(repo, tag, name, directory).read_text() != expected:
             raise ValueError(f'Release {name} mismatch')
     fetch(repo, tag, 'changelog.md', directory)
-    release_info = api(f'repos/{repo}/releases/tags/{tag}')
+    # gh resolves authenticated draft releases; REST lookup by tag returns 404 for drafts.
+    release_info = json.loads(gh('release', 'view', tag, '--repo', repo, '--json', 'assets,isDraft'))
     assets = release_info['assets']
     receipts = {}
     for platform in PLATFORMS:
@@ -217,7 +218,7 @@ def prepare():
             if any(asset['name'] == name for asset in assets):
                 receipts[name] = json.loads(fetch(repo, tag, name, directory).read_text())
     states = {p: platform_state(receipts, manifest, p) for p in PLATFORMS}
-    if release_info['draft']:
+    if release_info['isDraft']:
         gh('release', 'edit', tag, '--repo', repo, '--draft=false')
     output(version=version, jar=str(jar), **states)
     print(f'{tag}: ' + ', '.join(f'{p}={s}' for p, s in states.items()))

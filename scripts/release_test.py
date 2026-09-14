@@ -3,6 +3,7 @@ import hashlib
 import contextlib
 import json
 import os
+import subprocess
 from unittest.mock import patch
 import tempfile
 import unittest
@@ -191,18 +192,28 @@ class LedgerIntegrationTests(unittest.TestCase):
 
     def gh(self, *args, **kwargs):
         self.calls.append(args)
-        if args[:2] == ('api', '--paginate'):
+        if args == ('api', '--paginate', '--slurp', 'repos/owner/repo/releases?per_page=100'):
             return json.dumps([self.releases])
         if args[:2] == ('release', 'create'):
             self.releases.append({'tag_name': 'v1.2.3'})
-        if args[:2] == ('release', 'edit'):
+            return ''
+        if args == ('release', 'view', 'v1.2.3', '--repo', 'owner/repo', '--json', 'assets,isDraft'):
+            return json.dumps({'assets': [{'name': name} for name in self.assets], 'isDraft': self.draft})
+        if args == ('release', 'edit', 'v1.2.3', '--repo', 'owner/repo', '--draft=false'):
             self.draft = False
-        return ''
+            return ''
+        if args == ('api', '--method', 'POST', 'repos/owner/repo/git/refs', '--input', '-'):
+            return ''
+        raise AssertionError(f'Unhandled gh command: {args!r}')
 
     def api(self, path):
-        if '/git/matching-refs/' in path:
+        if path == 'repos/owner/repo/git/matching-refs/tags/v1.2.3':
             return []
-        return {'assets': [{'name': name} for name in self.assets], 'draft': self.draft}
+        if path == 'repos/owner/repo/releases/tags/v1.2.3':
+            if self.draft:
+                raise subprocess.CalledProcessError(1, ['gh', 'api', path], stderr='gh: Not Found (HTTP 404)')
+            return {'assets': [{'name': name} for name in self.assets], 'draft': False}
+        raise AssertionError(f'Unhandled API path: {path!r}')
 
     def upload(self, repo, tag, path):
         if path.name in self.assets:
@@ -213,6 +224,40 @@ class LedgerIntegrationTests(unittest.TestCase):
         path = directory / name
         path.write_bytes(self.assets[name])
         return path
+
+    def test_new_draft_is_prepared_when_rest_tag_lookup_returns_404(self):
+        release.prepare()
+        self.assertFalse(self.draft)
+        self.assertEqual(self.outputs.call_args.kwargs['modrinth'], 'pending')
+        self.assertEqual(self.outputs.call_args.kwargs['curseforge'], 'pending')
+        self.assertIn(('release', 'view', 'v1.2.3', '--repo', 'owner/repo', '--json', 'assets,isDraft'), self.calls)
+
+    def test_complete_existing_draft_recovers_original_jar_despite_new_build(self):
+        original = Path('build/libs/flashlight-fe-1.2.3.jar').read_bytes()
+        manifest = {
+            'version': '1.2.3', 'filename': 'flashlight-fe-1.2.3.jar', 'commit': 'b' * 40,
+            'sha256': hashlib.sha256(original).hexdigest(),
+            'projects': {'modrinth': '123', 'curseforge': '456'},
+        }
+        self.releases.append({'tag_name': 'v1.2.3'})
+        self.assets = {
+            'flashlight-fe-1.2.3.jar': original,
+            'release.json': json.dumps(manifest).encode(),
+            'COMMIT': (manifest['commit'] + '\n').encode(),
+            'SHA256SUMS': (manifest['sha256'] + '  flashlight-fe-1.2.3.jar\n').encode(),
+            'changelog.md': b'- Original release notes.\n',
+        }
+        original_assets = self.assets.copy()
+        Path('build/libs/flashlight-fe-1.2.3.jar').write_bytes(b'different rebuild')
+        with patch.dict(os.environ, {'GITHUB_SHA': 'c' * 40}):
+            release.prepare()
+        self.assertEqual(Path('release-artifact/flashlight-fe-1.2.3.jar').read_bytes(), original)
+        self.assertEqual(Path('release-artifact/changelog.md').read_bytes(), original_assets['changelog.md'])
+        self.assertEqual(self.assets, original_assets)
+        self.assertFalse(self.draft)
+        self.assertEqual(self.outputs.call_args.kwargs['modrinth'], 'pending')
+        self.assertEqual(self.outputs.call_args.kwargs['curseforge'], 'pending')
+        self.assertFalse(any(call[:2] == ('release', 'create') for call in self.calls))
 
     def test_missing_project_id_fails_clearly_before_release_side_effects(self):
         for platform in release.PLATFORMS:
@@ -244,7 +289,7 @@ class LedgerIntegrationTests(unittest.TestCase):
         self.calls.clear()
         release.prepare()
         self.assertEqual(self.outputs.call_args.kwargs['curseforge'], 'published')
-        self.assertFalse(any(call[0] == 'release' for call in self.calls))
+        self.assertFalse(any(call[:2] in (('release', 'create'), ('release', 'edit')) for call in self.calls))
 
     def test_uncertain_upload_blocks_next_run(self):
         release.prepare()
