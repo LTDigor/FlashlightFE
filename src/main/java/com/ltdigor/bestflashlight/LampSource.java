@@ -67,12 +67,27 @@ public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) 
             LampSource source = new LampSource(off, false, true);
             if (usable.test(source)) return source;
         }
-        ItemStack band = headband(entity);
-        if (LampData.enabled(band)) {
-            LampSource source = new LampSource(band, true, false);
-            if (usable.test(source)) return source;
-        }
+        LampSource headband = selectHeadband(entity, usable);
+        if (headband != null) return headband;
         return null;
+    }
+
+    private static LampSource selectHeadband(LivingEntity entity, Predicate<LampSource> usable) {
+        return CuriosApi.getCuriosInventory(entity).map(inventory -> {
+            var head = inventory.getCurios().get("head");
+            if (head == null) return null;
+            var items = head.getStacks();
+            for (int i = 0; i < items.getSlots(); i++) {
+                ItemStack band = items.getStackInSlot(i);
+                if (!(band.getItem() instanceof HeadbandItem) || LampData.mounted(band).isEmpty()
+                    || !LampData.enabled(band)) {
+                    continue;
+                }
+                LampSource source = new LampSource(band, true, false);
+                if (usable.test(source)) return source;
+            }
+            return null;
+        }).orElse(null);
     }
 
     static void resetLegacyCheck(UUID player) {
