@@ -33,6 +33,10 @@ public final class FlashlightNetwork {
         });
         optional.playToClient(FallbackMode.TYPE, FallbackMode.CODEC, (payload, context) ->
             NeoForge.EVENT_BUS.post(new FallbackModeEvent(payload.enabled())));
+        optional.playToClient(HeadbandEnergy.TYPE, HeadbandEnergy.CODEC, (payload, context) -> {
+            ItemStack band = LampSource.headband(context.player());
+            if (!band.isEmpty()) LampEnergy.setSyncedStored(band, payload.energy());
+        });
     }
 
     public record Toggle(LampControl.Action action) implements CustomPacketPayload {
@@ -62,6 +66,14 @@ public final class FlashlightNetwork {
             (buffer, value) -> buffer.writeBoolean(value.enabled()),
             buffer -> new FallbackMode(buffer.readBoolean()));
         @Override public Type<FallbackMode> type() { return TYPE; }
+    }
+
+    public record HeadbandEnergy(int energy) implements CustomPacketPayload {
+        public static final Type<HeadbandEnergy> TYPE = new Type<>(FlashlightMod.resource("headband_energy"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, HeadbandEnergy> CODEC = StreamCodec.of(
+            (buffer, value) -> buffer.writeVarInt(value.energy()),
+            buffer -> new HeadbandEnergy(buffer.readVarInt()));
+        @Override public Type<HeadbandEnergy> type() { return TYPE; }
     }
 
     public record Press(UUID owner, InteractionHand hand, boolean previousEnabled, boolean enabled) implements CustomPacketPayload {
