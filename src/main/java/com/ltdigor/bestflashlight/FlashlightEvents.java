@@ -29,9 +29,10 @@ public final class FlashlightEvents {
     private static final Map<ResourceKey<Level>, Map<BlockPos, Map<UUID, Integer>>> LIGHT_OWNERS = new HashMap<>();
     private static final Map<UUID, PlayerBeam> PLAYER_BEAMS = new HashMap<>();
 
-    // Integer points inside a radius-four disk give 49 directions, including the axis
-    // and all four cone edges. Cost remains bounded even at maximum range and angle.
-    private static final int DIRECTION_RADIUS = 4;
+    // Integer points inside a radius-three disk give 29 directions, including the
+    // axis and cone edges. This keeps fallback quality while cutting server ray work
+    // by about 41% compared with the previous 49-ray disk.
+    private static final int DIRECTION_RADIUS = 3;
     private static final int MAX_RAY_CELLS = 128;
 
     // Vanilla block light itself is isotropic. For a headlamp, only the terminal cells
