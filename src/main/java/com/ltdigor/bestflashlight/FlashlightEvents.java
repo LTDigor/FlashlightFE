@@ -463,7 +463,10 @@ public final class FlashlightEvents {
     static void forgetLight(ResourceKey<Level> dimension, BlockPos pos) {
         Map<BlockPos, Map<UUID, Integer>> lights = LIGHT_OWNERS.get(dimension);
         if (lights != null) {
-            lights.remove(pos);
+            Map<UUID, Integer> removedOwners = lights.remove(pos);
+            if (removedOwners != null) {
+                for (UUID owner : removedOwners.keySet()) BEAM_CACHE.remove(owner);
+            }
             if (lights.isEmpty()) LIGHT_OWNERS.remove(dimension);
         }
     }
