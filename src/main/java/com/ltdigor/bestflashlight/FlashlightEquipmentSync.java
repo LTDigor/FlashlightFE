@@ -31,6 +31,12 @@ public final class FlashlightEquipmentSync {
         return false;
     }
 
+    public static void advanceDirectEnergySnapshot(ItemStack snapshot, ItemStack current) {
+        if (FlashlightMod.isFlashlight(snapshot) && FlashlightMod.isFlashlight(current)) {
+            snapshot.set(LampData.ENERGY.get(), current.getOrDefault(LampData.ENERGY.get(), 0));
+        }
+    }
+
     public static boolean matchesIgnoringEnergy(ItemStack first, ItemStack second) {
         return ItemStack.matches(first, second) || isEnergyOnlyChange(first, second);
     }
