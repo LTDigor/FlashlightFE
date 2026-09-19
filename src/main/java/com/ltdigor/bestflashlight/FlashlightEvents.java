@@ -17,7 +17,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.common.NeoForge;
@@ -419,12 +418,6 @@ public final class FlashlightEvents {
             : current.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
                 ? current.getValue(FlashlightLightBlock.WATER_LEVEL)
                 : 0;
-        if (replacingWater) {
-            // A queued FlowingFluid tick would otherwise replace the carrier with a
-            // legacy water block. Freeze only this cell while illuminated; restore()
-            // restarts fluid simulation with the exact saved water level.
-            level.getFluidTicks().clearArea(new BoundingBox(pos));
-        }
         BlockState desired = FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState()
             .setValue(FlashlightLightBlock.LEVEL, strongest)
             .setValue(FlashlightLightBlock.WATERLOGGED, waterlogged)
