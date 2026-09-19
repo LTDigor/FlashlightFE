@@ -48,6 +48,9 @@ final class OptionalDynamicLights {
     private static final double NOMINAL_SMOOTHING = 0.38;
     private static final double NOMINAL_FPS = 60.0;
     private static final double CLIENT_TICK_SECONDS = 1.0 / 20.0;
+    private static final int STATIC_OCCLUSION_REFRESH_TICKS = 4;
+    private static final double OCCLUSION_POSITION_EPSILON_SQR = 0.01 * 0.01;
+    private static final double OCCLUSION_DIRECTION_DOT = Math.cos(Math.toRadians(0.20));
     private static final double DIAGONAL = Math.sqrt(0.5);
 
     // Centre, outer cardinal/diagonal ring, and a half-radius ring. Seventeen
@@ -348,6 +351,11 @@ final class OptionalDynamicLights {
         private final ConeState state;
         private final Object behavior;
         private Vec3 smoothDirection;
+        private Vec3 lastProbeStart;
+        private Vec3 lastProbeAxis;
+        private double[] hitDistances;
+        private long[] hitBlocks;
+        private int ticksSinceProbe = STATIC_OCCLUSION_REFRESH_TICKS;
         private boolean added;
 
         private DynamicCone(ConeState state, Object behavior) {
@@ -370,21 +378,34 @@ final class OptionalDynamicLights {
             Vec3 right = axis.cross(reference).normalize();
             Vec3 up = right.cross(axis).normalize();
 
-            double[] hitDistances = new double[SAMPLE_X.length];
-            long[] hitBlocks = new long[SAMPLE_X.length];
-            Arrays.fill(hitBlocks, FlashlightBeamMath.NO_HIT_BLOCK);
-            for (int i = 0; i < SAMPLE_X.length; i++) {
-                Vec3 rayDirection = FlashlightBeamMath.coneDirection(
-                    axis, right, up, halfAngle * SAMPLE_X[i], halfAngle * SAMPLE_Y[i]);
-                Vec3 requestedEnd = start.add(rayDirection.scale(range));
-                BlockHitResult hit = level.clip(new ClipContext(
-                    start, requestedEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
-                if (hit.getType() == HitResult.Type.MISS) {
-                    hitDistances[i] = range;
-                } else {
-                    hitDistances[i] = Math.max(0.0, start.distanceTo(hit.getLocation()));
-                    hitBlocks[i] = hit.getBlockPos().asLong();
+            boolean refreshOcclusion = hitDistances == null || hitBlocks == null
+                || lastProbeStart == null || lastProbeAxis == null
+                || lastProbeStart.distanceToSqr(start) > OCCLUSION_POSITION_EPSILON_SQR
+                || lastProbeAxis.dot(axis) < OCCLUSION_DIRECTION_DOT
+                || ticksSinceProbe >= STATIC_OCCLUSION_REFRESH_TICKS;
+
+            if (refreshOcclusion) {
+                hitDistances = new double[SAMPLE_X.length];
+                hitBlocks = new long[SAMPLE_X.length];
+                Arrays.fill(hitBlocks, FlashlightBeamMath.NO_HIT_BLOCK);
+                for (int i = 0; i < SAMPLE_X.length; i++) {
+                    Vec3 rayDirection = FlashlightBeamMath.coneDirection(
+                        axis, right, up, halfAngle * SAMPLE_X[i], halfAngle * SAMPLE_Y[i]);
+                    Vec3 requestedEnd = start.add(rayDirection.scale(range));
+                    BlockHitResult hit = level.clip(new ClipContext(
+                        start, requestedEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
+                    if (hit.getType() == HitResult.Type.MISS) {
+                        hitDistances[i] = range;
+                    } else {
+                        hitDistances[i] = Math.max(0.0, start.distanceTo(hit.getLocation()));
+                        hitBlocks[i] = hit.getBlockPos().asLong();
+                    }
                 }
+                lastProbeStart = start;
+                lastProbeAxis = axis;
+                ticksSinceProbe = 0;
+            } else {
+                ticksSinceProbe++;
             }
 
             state.update(start, axis, right, up, range, halfAngle, hitDistances, hitBlocks);
