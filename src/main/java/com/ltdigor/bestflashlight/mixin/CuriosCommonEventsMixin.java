@@ -13,10 +13,33 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import top.theillusivec4.curios.api.type.inventory.IDynamicStackHandler;
 
 @Pseudo
 @Mixin(targets = "top.theillusivec4.curios.common.event.CuriosEventHandler", remap = false)
 abstract class CuriosCommonEventsMixin {
+    private static final ThreadLocal<Integer> BESTFLASHLIGHT_SLOT_INDEX =
+        ThreadLocal.withInitial(() -> -1);
+
+    @Redirect(
+        method = "tick",
+        at = @At(
+            value = "INVOKE",
+            target = "Ltop/theillusivec4/curios/api/type/inventory/IDynamicStackHandler;getPreviousStackInSlot(I)Lnet/minecraft/world/item/ItemStack;",
+            remap = false
+        ),
+        require = 0,
+        remap = false
+    )
+    private ItemStack bestflashlight$captureCurioSlot(
+        IDynamicStackHandler handler,
+        int slotIndex,
+        EntityTickEvent.Post event
+    ) {
+        BESTFLASHLIGHT_SLOT_INDEX.set(slotIndex);
+        return handler.getPreviousStackInSlot(slotIndex);
+    }
+
     @Redirect(
         method = "tick",
         at = @At(
@@ -32,13 +55,16 @@ abstract class CuriosCommonEventsMixin {
         ItemStack previous,
         EntityTickEvent.Post event
     ) {
+        int slotIndex = BESTFLASHLIGHT_SLOT_INDEX.get();
         if (FlashlightEquipmentSync.isEnergyOnlyChange(current, previous)
             && event.getEntity() instanceof ServerPlayer player
-            && LampSource.headband(player) == current
+            && slotIndex >= 0
+            && LampSource.headband(player, slotIndex) == current
             && player.connection.hasChannel(FlashlightNetwork.HeadbandEnergy.TYPE)) {
             PacketDistributor.sendToPlayer(
                 player,
                 new FlashlightNetwork.HeadbandEnergy(
+                    slotIndex,
                     LampEnergy.stored(previous),
                     LampEnergy.stored(current)
                 )
