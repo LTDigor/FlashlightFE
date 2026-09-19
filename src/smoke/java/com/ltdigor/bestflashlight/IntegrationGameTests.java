@@ -158,6 +158,17 @@ public class IntegrationGameTests {
             ItemStack lamp = lamp(50); LampData.setEnabled(lamp, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            helper.assertTrue(LampEnergy.stored(lamp) == 49,
+                "A nearby partial collision must clip the beam without switching the flashlight off");
+            boolean cameraSideLight = false;
+            for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 4)) {
+                if (helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
+                    cameraSideLight = true;
+                    break;
+                }
+            }
+            helper.assertTrue(cameraSideLight,
+                "A pane sharing the eye block must retain a temporary light on the camera side");
             for (BlockPos pos : BlockPos.betweenClosed(0, 0, 5, 15, 7, 15)) {
                 helper.assertTrue(!helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
                     "Handheld emitter must not jump through nearby glass pane");
