@@ -225,6 +225,19 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void temporaryWaterCarrierCannotBeBucketed(GameTestHelper helper) {
+        helper.assertTrue(
+            !(FlashlightMod.FLASHLIGHT_LIGHT.get() instanceof net.minecraft.world.level.block.BucketPickup),
+            "Temporary flashlight carrier must not expose BucketPickup"
+        );
+        helper.assertTrue(
+            !(FlashlightMod.FLASHLIGHT_LIGHT.get() instanceof net.minecraft.world.level.block.LiquidBlockContainer),
+            "Temporary flashlight carrier must not expose liquid-placement interactions"
+        );
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void flowingWaterSurvivesTemporaryLightAndPlantsStayUntouched(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos flowingPos = helper.absolutePos(new BlockPos(4, 2, 4));
