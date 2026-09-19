@@ -103,6 +103,8 @@ public final class FlashlightEvents {
         }
 
         Vec3 eye = player.getEyePosition();
+        double configuredRange = Math.clamp(FlashlightConfig.BEAM_RANGE.get(), 1.0, 32.0);
+        double configuredAngle = Math.clamp(FlashlightConfig.CONE_ANGLE_DEGREES.get(), 1.0, 90.0);
         long gameTick = level.getGameTime();
         BeamCache cached = BEAM_CACHE.get(owner);
         PlayerBeam previous = PLAYER_BEAMS.get(owner);
@@ -114,6 +116,8 @@ public final class FlashlightEvents {
             && cached.eye().distanceToSqr(eye) <= CACHE_POSITION_EPSILON_SQR
             && cached.emitter().distanceToSqr(emitter) <= CACHE_POSITION_EPSILON_SQR
             && cached.look().dot(look) >= CACHE_DIRECTION_DOT
+            && Double.compare(cached.range(), configuredRange) == 0
+            && Double.compare(cached.fullAngleDegrees(), configuredAngle) == 0
             && gameTick - cached.computedAtTick() < STATIC_BEAM_REFRESH_TICKS;
 
         if (reuse) {
@@ -157,7 +161,8 @@ public final class FlashlightEvents {
         }
         PLAYER_BEAMS.put(owner, new PlayerBeam(level.dimension(), new HashSet<>(next.keySet())));
         BEAM_CACHE.put(owner, new BeamCache(
-            level.dimension(), eye, emitter, look, source.headMounted(), source.offHand(), gameTick
+            level.dimension(), eye, emitter, look, source.headMounted(), source.offHand(),
+            configuredRange, configuredAngle, gameTick
         ));
     }
 
@@ -536,5 +541,6 @@ public final class FlashlightEvents {
 
     private record PlayerBeam(ResourceKey<Level> dimension, Set<BlockPos> positions) {}
     private record BeamCache(ResourceKey<Level> dimension, Vec3 eye, Vec3 emitter, Vec3 look,
-                             boolean headMounted, boolean offHand, long computedAtTick) {}
+                             boolean headMounted, boolean offHand, double range,
+                             double fullAngleDegrees, long computedAtTick) {}
 }
