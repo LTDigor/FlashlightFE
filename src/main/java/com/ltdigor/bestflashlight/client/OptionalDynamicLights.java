@@ -27,6 +27,7 @@ import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.slf4j.Logger;
@@ -34,9 +35,9 @@ import org.slf4j.Logger;
 /**
  * Optional client-only bridge to LambDynamicLights.
  *
- * LDL polls custom behavior changes from its client-tick pipeline, so beam geometry
- * and occlusion are updated on client ticks and cached while static. This avoids
- * world raycasts on every rendered frame while staying aligned with LDL's rebuild cadence.
+ * LDL polls occlusion/chunk work from its client-tick pipeline, so expensive world
+ * probes stay tick-driven and cached. Beam pose and smoothing are updated every render
+ * frame without raycasts, avoiding 20 TPS aiming/origin stepping at high frame rates.
  *
  * When every connected client reports a compatible, enabled LDL bridge, the server
  * disables its temporary block-light beam. This bridge then renders one cone for each
@@ -47,7 +48,6 @@ final class OptionalDynamicLights {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final double NOMINAL_SMOOTHING = 0.38;
     private static final double NOMINAL_FPS = 60.0;
-    private static final double CLIENT_TICK_SECONDS = 1.0 / 20.0;
     private static final int STATIC_OCCLUSION_REFRESH_TICKS = 4;
     private static final double OCCLUSION_POSITION_EPSILON_SQR = 0.01 * 0.01;
     private static final double OCCLUSION_DIRECTION_DOT = Math.cos(Math.toRadians(0.20));
@@ -89,6 +89,7 @@ final class OptionalDynamicLights {
 
     static void register() {
         NeoForge.EVENT_BUS.addListener(OptionalDynamicLights::fallbackMode);
+        NeoForge.EVENT_BUS.addListener(OptionalDynamicLights::renderFrame);
     }
 
     static void clientTick() {
@@ -141,6 +142,42 @@ final class OptionalDynamicLights {
             return;
         }
         if (available) reportReady(connection);
+    }
+
+    private static void renderFrame(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
+        Minecraft client = Minecraft.getInstance();
+        if (!available || client.level == null || client.player == null || activeLevel != client.level) return;
+        if (serverFallbackEnabled && fallbackGraceTicks <= 0) return;
+
+        double range = Math.clamp(FlashlightConfig.BEAM_RANGE.get(), 1.0, 32.0);
+        double halfAngle = FlashlightBeamMath.halfAngleRadians(FlashlightConfig.CONE_ANGLE_DEGREES.get());
+        float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
+        double deltaSeconds = Math.max(0.0, event.getPartialTick().getRealtimeDeltaTicks()) / 20.0;
+
+        for (Player player : client.level.players()) {
+            DynamicCone cone = CONES.get(player.getUUID());
+            if (cone == null || !player.isAlive() || player.isSpectator()) continue;
+
+            Vec3 look = player.getViewVector(partialTick);
+            if (look.lengthSqr() < 1.0E-12) continue;
+            look = look.normalize();
+            Vec3 eye = player.getEyePosition(partialTick);
+            Vec3 start;
+            Vec3 target = look;
+
+            if (player == client.player && client.options.getCameraType().isFirstPerson()) {
+                var camera = event.getCamera();
+                var cameraLook = camera.getLookVector();
+                target = new Vec3(cameraLook.x(), cameraLook.y(), cameraLook.z());
+                start = camera.getPosition();
+            } else {
+                Vec3 emitter = emitterOrigin(player, cone.headMounted, cone.offHand, look, eye);
+                start = cone.useEmitter ? emitter : eye;
+            }
+
+            cone.frameUpdate(start, target, range, halfAngle, deltaSeconds);
+        }
     }
 
     private static void fallbackMode(FlashlightNetwork.FallbackModeEvent event) {
@@ -209,11 +246,14 @@ final class OptionalDynamicLights {
                 target = new Vec3(cameraLook.x(), cameraLook.y(), cameraLook.z());
                 start = camera.getPosition();
             } else {
-                start = emitterPathClear(client.level, player, eye, emitter) ? emitter : eye;
+                start = emitter;
             }
 
             DynamicCone cone = CONES.computeIfAbsent(player.getUUID(), OptionalDynamicLights::createCone);
-            cone.update(client.level, player, start, target, range, halfAngle);
+            boolean localFirstPerson = player == client.player && client.options.getCameraType().isFirstPerson();
+            boolean useEmitter = !localFirstPerson && emitterPathClear(client.level, player, eye, emitter);
+            cone.configureSource(source.headMounted(), source.offHand(), useEmitter);
+            cone.tickUpdate(client.level, player, start, target, range, halfAngle);
             if (!cone.added && !addCone(cone)) {
                 disable();
                 return;
@@ -241,7 +281,11 @@ final class OptionalDynamicLights {
     }
 
     private static Vec3 emitterOrigin(Player player, LampSource source, Vec3 look, Vec3 eye) {
-        if (source.headMounted()) return eye.add(look.scale(0.45)).add(0.0, 0.15, 0.0);
+        return emitterOrigin(player, source.headMounted(), source.offHand(), look, eye);
+    }
+
+    private static Vec3 emitterOrigin(Player player, boolean headMounted, boolean offHand, Vec3 look, Vec3 eye) {
+        if (headMounted) return eye.add(look.scale(0.45)).add(0.0, 0.15, 0.0);
         Vec3 right = new Vec3(-look.z, 0.0, look.x);
         if (right.lengthSqr() < 1.0E-12) {
             double yaw = Math.toRadians(player.getYRot());
@@ -249,7 +293,7 @@ final class OptionalDynamicLights {
         } else {
             right = right.normalize();
         }
-        boolean rightHand = (player.getMainArm() == HumanoidArm.RIGHT) != source.offHand();
+        boolean rightHand = (player.getMainArm() == HumanoidArm.RIGHT) != offHand;
         return eye.add(look.scale(0.55)).add(right.scale(rightHand ? 0.35 : -0.35)).add(0.0, -0.45, 0.0);
     }
 
@@ -426,6 +470,10 @@ final class OptionalDynamicLights {
         private double[] hitDistances;
         private long[] hitBlocks;
         private int ticksSinceProbe = STATIC_OCCLUSION_REFRESH_TICKS;
+        private boolean headMounted;
+        private boolean offHand;
+        private boolean useEmitter;
+        private boolean geometryInitialized;
         private boolean added;
 
         private DynamicCone(ConeState state, Object behavior) {
@@ -433,20 +481,21 @@ final class OptionalDynamicLights {
             this.behavior = behavior;
         }
 
-        private void update(ClientLevel level, Player player, Vec3 start, Vec3 target,
-                            double range, double halfAngle) {
-            double smoothing = FlashlightBeamMath.frameIndependentFactor(
-                NOMINAL_SMOOTHING, CLIENT_TICK_SECONDS, NOMINAL_FPS);
-            smoothDirection = FlashlightBeamMath.smooth(smoothDirection, target, smoothing);
-            Vec3 axis = smoothDirection == null || smoothDirection.lengthSqr() < 1.0E-12
-                ? target.normalize()
-                : smoothDirection.normalize();
+        private void configureSource(boolean headMounted, boolean offHand, boolean useEmitter) {
+            this.headMounted = headMounted;
+            this.offHand = offHand;
+            this.useEmitter = useEmitter;
+        }
 
-            Vec3 reference = Math.abs(axis.y) > 0.99
-                ? new Vec3(1.0, 0.0, 0.0)
-                : new Vec3(0.0, 1.0, 0.0);
-            Vec3 right = axis.cross(reference).normalize();
-            Vec3 up = right.cross(axis).normalize();
+        private void tickUpdate(ClientLevel level, Player player, Vec3 start, Vec3 target,
+                                double range, double halfAngle) {
+            if (smoothDirection == null || smoothDirection.lengthSqr() < 1.0E-12) {
+                smoothDirection = target.normalize();
+            }
+            Vec3 axis = smoothDirection.normalize();
+            Vec3[] basis = basis(axis);
+            Vec3 right = basis[0];
+            Vec3 up = basis[1];
 
             boolean refreshOcclusion = hitDistances == null || hitBlocks == null
                 || lastProbeStart == null || lastProbeAxis == null
@@ -478,12 +527,38 @@ final class OptionalDynamicLights {
                 lastProbeRange = range;
                 lastProbeHalfAngle = halfAngle;
                 ticksSinceProbe = 0;
+                state.updateOcclusion(hitDistances, hitBlocks);
             } else {
                 ticksSinceProbe++;
             }
 
-            state.update(start, axis, right, up, range, halfAngle, hitDistances, hitBlocks);
+            if (!geometryInitialized) {
+                state.updateGeometry(start, axis, right, up, range, halfAngle);
+                geometryInitialized = true;
+            }
             state.setActive(true);
+        }
+
+        private void frameUpdate(Vec3 start, Vec3 target, double range, double halfAngle, double deltaSeconds) {
+            double smoothing = FlashlightBeamMath.frameIndependentFactor(
+                NOMINAL_SMOOTHING, deltaSeconds, NOMINAL_FPS);
+            smoothDirection = FlashlightBeamMath.smooth(smoothDirection, target, smoothing);
+            Vec3 axis = smoothDirection == null || smoothDirection.lengthSqr() < 1.0E-12
+                ? target.normalize()
+                : smoothDirection.normalize();
+            Vec3[] basis = basis(axis);
+            state.updateGeometry(start, axis, basis[0], basis[1], range, halfAngle);
+            geometryInitialized = true;
+            state.setActive(true);
+        }
+
+        private static Vec3[] basis(Vec3 axis) {
+            Vec3 reference = Math.abs(axis.y) > 0.99
+                ? new Vec3(1.0, 0.0, 0.0)
+                : new Vec3(0.0, 1.0, 0.0);
+            Vec3 right = axis.cross(reference).normalize();
+            Vec3 up = right.cross(axis).normalize();
+            return new Vec3[]{right, up};
         }
     }
 
@@ -516,14 +591,12 @@ final class OptionalDynamicLights {
             return active;
         }
 
-        private void update(Vec3 newOrigin, Vec3 newAxis, Vec3 newRight, Vec3 newUp,
-                            double newRange, double newHalfAngle, double[] newHitDistances, long[] newHitBlocks) {
+        private void updateGeometry(Vec3 newOrigin, Vec3 newAxis, Vec3 newRight, Vec3 newUp,
+                                    double newRange, double newHalfAngle) {
             boolean changed = origin.distanceToSqr(newOrigin) > POSITION_EPSILON_SQR
                 || axis.dot(newAxis) < DIRECTION_DOT_EPSILON
                 || Math.abs(range - newRange) > VALUE_EPSILON
-                || Math.abs(halfAngle - newHalfAngle) > VALUE_EPSILON
-                || occlusionChanged(newHitDistances, newHitBlocks);
-
+                || Math.abs(halfAngle - newHalfAngle) > VALUE_EPSILON;
             if (!changed) return;
             origin = newOrigin;
             axis = newAxis;
@@ -531,6 +604,11 @@ final class OptionalDynamicLights {
             up = newUp;
             range = newRange;
             halfAngle = newHalfAngle;
+            revision++;
+        }
+
+        private void updateOcclusion(double[] newHitDistances, long[] newHitBlocks) {
+            if (!occlusionChanged(newHitDistances, newHitBlocks)) return;
             hitDistances = newHitDistances.clone();
             hitBlocks = newHitBlocks.clone();
             revision++;
