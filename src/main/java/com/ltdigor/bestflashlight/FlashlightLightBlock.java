@@ -1,12 +1,18 @@
 package com.ltdigor.bestflashlight;
 
 import com.mojang.serialization.MapCodec;
+import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BucketPickup;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.RenderShape;
@@ -22,7 +28,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /** Invisible light carrier whose water state survives ownership changes and reloads. */
-public final class FlashlightLightBlock extends Block {
+public final class FlashlightLightBlock extends Block implements BucketPickup {
     public static final MapCodec<FlashlightLightBlock> CODEC = simpleCodec(FlashlightLightBlock::new);
     public static final IntegerProperty LEVEL = BlockStateProperties.LEVEL;
     public static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;
@@ -67,6 +73,24 @@ public final class FlashlightLightBlock extends Block {
         return Blocks.WATER.defaultBlockState()
             .setValue(LiquidBlock.LEVEL, state.getValue(WATER_LEVEL))
             .getFluidState();
+    }
+
+    @Override
+    public ItemStack pickupBlock(net.minecraft.world.entity.player.Player player, LevelAccessor level,
+                                 BlockPos pos, BlockState state) {
+        if (!state.getValue(WATERLOGGED) || !getFluidState(state).isSource()) return ItemStack.EMPTY;
+
+        level.setBlock(
+            pos,
+            state.setValue(WATERLOGGED, false).setValue(WATER_LEVEL, 0),
+            Block.UPDATE_ALL
+        );
+        return new ItemStack(Items.WATER_BUCKET);
+    }
+
+    @Override
+    public Optional<SoundEvent> getPickupSound() {
+        return Fluids.WATER.getPickupSound();
     }
 
     @Override
