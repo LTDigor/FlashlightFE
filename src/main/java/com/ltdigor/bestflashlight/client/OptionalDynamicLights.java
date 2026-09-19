@@ -26,13 +26,15 @@ final class OptionalDynamicLights {
     private static boolean initialized;
     private static boolean available;
     private static Object manager;
-    private static Object line;
+    private static Object[] lines;
     private static Method add;
     private static Method remove;
     private static Method setStart;
     private static Method setEnd;
     private static Method setLuminance;
     private static Vec3 smoothDirection;
+    private static final double[] CONE_X = {0.0, 0.55, -0.55, 0.0, 0.0, 0.38, -0.38, 0.38, -0.38};
+    private static final double[] CONE_Y = {0.0, 0.0, 0.0, 0.55, -0.55, 0.38, 0.38, -0.38, -0.38};
 
     private OptionalDynamicLights() {}
 
@@ -63,23 +65,26 @@ final class OptionalDynamicLights {
         Vec3 target = new Vec3(cameraLook.x(), cameraLook.y(), cameraLook.z());
         if (target.lengthSqr() < 1.0E-12) return;
         target = target.normalize();
-        smoothDirection = smoothDirection == null
-            ? target
-            : smoothDirection.scale(1.0 - SMOOTHING).add(target.scale(SMOOTHING)).normalize();
+        smoothDirection = FlashlightBeamMath.smooth(smoothDirection, target, SMOOTHING);
 
         Vec3 start = client.gameRenderer.getMainCamera().getPosition();
         double range = Math.clamp(FlashlightConfig.BEAM_RANGE.get(), 1.0, 32.0);
-        Vec3 requestedEnd = start.add(smoothDirection.scale(range));
-        HitResult hit = client.level.clip(new ClipContext(start, requestedEnd,
-            ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, client.player));
+        Vec3 reference = Math.abs(smoothDirection.y) > 0.99 ? new Vec3(1.0, 0.0, 0.0) : new Vec3(0.0, 1.0, 0.0);
+        Vec3 right = smoothDirection.cross(reference).normalize();
+        Vec3 up = right.cross(smoothDirection).normalize();
+        double halfAngle = FlashlightBeamMath.coneOffsetRadians(FlashlightConfig.CONE_ANGLE_DEGREES.get(), 1.0);
 
-        Vec3 end = hit.getType() == HitResult.Type.MISS ? requestedEnd : hit.getLocation();
-        if (hit.getType() != HitResult.Type.MISS) {
-            double distance = Math.max(0.0, start.distanceTo(end) - WALL_EPSILON);
-            end = start.add(smoothDirection.scale(distance));
+        for (int i = 0; i < lines.length; i++) {
+            Vec3 direction = FlashlightBeamMath.coneDirection(
+                smoothDirection, right, up, halfAngle * CONE_X[i], halfAngle * CONE_Y[i]);
+            Vec3 requestedEnd = start.add(direction.scale(range));
+            HitResult hit = client.level.clip(new ClipContext(start, requestedEnd,
+                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, client.player));
+            Vec3 end = hit.getType() == HitResult.Type.MISS
+                ? requestedEnd
+                : FlashlightBeamMath.wallEnd(start, direction, start.distanceTo(hit.getLocation()), WALL_EPSILON);
+            updateLine(i, start, end, i == 0 ? 15 : (i <= 4 ? 12 : 9));
         }
-
-        updateLine(start, end);
     }
 
     private static void ensureInitialized() {
@@ -93,7 +98,10 @@ final class OptionalDynamicLights {
             Class<?> behavior = Class.forName("dev.lambdaurora.lambdynlights.api.behavior.DynamicLightBehavior");
             Class<?> lineClass = Class.forName("dev.lambdaurora.lambdynlights.api.behavior.LineLightBehavior");
             Constructor<?> constructor = lineClass.getConstructor(Vector3d.class, Vector3d.class, int.class);
-            line = constructor.newInstance(new Vector3d(), new Vector3d(), 15);
+            lines = new Object[CONE_X.length];
+            for (int i = 0; i < lines.length; i++) {
+                lines[i] = constructor.newInstance(new Vector3d(), new Vector3d(), i == 0 ? 15 : 9);
+            }
 
             add = manager.getClass().getMethod("add", behavior);
             remove = manager.getClass().getMethod("remove", behavior);
@@ -104,41 +112,40 @@ final class OptionalDynamicLights {
         } catch (ReflectiveOperationException | LinkageError ignored) {
             available = false;
             manager = null;
-            line = null;
+            lines = null;
         }
     }
 
-    private static void updateLine(Vec3 start, Vec3 end) {
+    private static void updateLine(int index, Vec3 start, Vec3 end, int luminance) {
         try {
+            Object line = lines[index];
             setStart.invoke(line, start.x, start.y, start.z);
             setEnd.invoke(line, end.x, end.y, end.z);
-            setLuminance.invoke(line, 15);
-            if (!lineAdded) {
-                add.invoke(manager, line);
-                lineAdded = true;
-            }
+            setLuminance.invoke(line, luminance);
+            if (!linesAdded) add.invoke(manager, line);
+            if (index == lines.length - 1) linesAdded = true;
         } catch (ReflectiveOperationException | LinkageError ignored) {
             disable();
         }
     }
 
-    private static boolean lineAdded;
+    private static boolean linesAdded;
 
     private static void removeLine() {
-        if (!lineAdded || manager == null || line == null) return;
+        if (!linesAdded || manager == null || lines == null) return;
         try {
-            remove.invoke(manager, line);
+            for (Object line : lines) remove.invoke(manager, line);
         } catch (ReflectiveOperationException | LinkageError ignored) {
             disable();
         } finally {
-            lineAdded = false;
+            linesAdded = false;
         }
     }
 
     private static void disable() {
         available = false;
         manager = null;
-        line = null;
-        lineAdded = false;
+        lines = null;
+        linesAdded = false;
     }
 }
