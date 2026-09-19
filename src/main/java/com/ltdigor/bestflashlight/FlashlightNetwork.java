@@ -21,6 +21,15 @@ public final class FlashlightNetwork {
         });
         registrar.playToClient(Press.TYPE, Press.CODEC, (payload, context) ->
             NeoForge.EVENT_BUS.post(new PressEvent(payload.owner(), payload.hand(), payload.previousEnabled(), payload.enabled())));
+
+        // Optional to keep 1.0.2 peers compatible. Missing support means the server
+        // simply keeps its normal temporary block-light fallback.
+        var optional = registrar.optional();
+        optional.playToServer(DynamicSupport.TYPE, DynamicSupport.CODEC, (payload, context) -> {
+            if (context.player() instanceof ServerPlayer player) DynamicLightCoordination.report(player, payload.active());
+        });
+        optional.playToClient(FallbackMode.TYPE, FallbackMode.CODEC, (payload, context) ->
+            NeoForge.EVENT_BUS.post(new FallbackModeEvent(payload.enabled())));
     }
 
     public record Toggle(LampControl.Action action) implements CustomPacketPayload {
@@ -28,6 +37,22 @@ public final class FlashlightNetwork {
         public static final StreamCodec<RegistryFriendlyByteBuf, Toggle> CODEC = StreamCodec.of(
             (buffer, value) -> buffer.writeEnum(value.action()), buffer -> new Toggle(buffer.readEnum(LampControl.Action.class)));
         @Override public Type<Toggle> type() { return TYPE; }
+    }
+
+    public record DynamicSupport(boolean active) implements CustomPacketPayload {
+        public static final Type<DynamicSupport> TYPE = new Type<>(FlashlightMod.resource("dynamic_support"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, DynamicSupport> CODEC = StreamCodec.of(
+            (buffer, value) -> buffer.writeBoolean(value.active()),
+            buffer -> new DynamicSupport(buffer.readBoolean()));
+        @Override public Type<DynamicSupport> type() { return TYPE; }
+    }
+
+    public record FallbackMode(boolean enabled) implements CustomPacketPayload {
+        public static final Type<FallbackMode> TYPE = new Type<>(FlashlightMod.resource("fallback_mode"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, FallbackMode> CODEC = StreamCodec.of(
+            (buffer, value) -> buffer.writeBoolean(value.enabled()),
+            buffer -> new FallbackMode(buffer.readBoolean()));
+        @Override public Type<FallbackMode> type() { return TYPE; }
     }
 
     public record Press(UUID owner, InteractionHand hand, boolean previousEnabled, boolean enabled) implements CustomPacketPayload {
@@ -39,6 +64,12 @@ public final class FlashlightNetwork {
             buffer.writeBoolean(value.enabled());
         }, buffer -> new Press(buffer.readUUID(), buffer.readEnum(InteractionHand.class), buffer.readBoolean(), buffer.readBoolean()));
         @Override public Type<Press> type() { return TYPE; }
+    }
+
+    public static final class FallbackModeEvent extends Event {
+        private final boolean enabled;
+        public FallbackModeEvent(boolean enabled) { this.enabled = enabled; }
+        public boolean enabled() { return enabled; }
     }
 
     /** Posted on the client game thread; common code has no client class dependencies. */
