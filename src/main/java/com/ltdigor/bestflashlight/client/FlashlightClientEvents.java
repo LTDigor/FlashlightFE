@@ -56,6 +56,7 @@ public final class FlashlightClientEvents {
         NeoForge.EVENT_BUS.addListener(FlashlightClientEvents::mouse);
         NeoForge.EVENT_BUS.addListener(FlashlightClientEvents::interaction);
         NeoForge.EVENT_BUS.addListener(FlashlightClientEvents::tooltip);
+        OptionalDynamicLights.register();
     }
 
     private static boolean inGame() {
