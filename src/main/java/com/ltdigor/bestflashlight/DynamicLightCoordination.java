@@ -47,7 +47,7 @@ final class DynamicLightCoordination {
         if (oldLevel != null) recompute(oldLevel, player.getUUID());
         if (newLevel != null) {
             recompute(newLevel);
-            sendCurrentMode(player);
+            sendCurrentMode(player, to);
         }
     }
 
@@ -56,9 +56,9 @@ final class DynamicLightCoordination {
         return FALLBACK_BY_DIMENSION.getOrDefault(player.level().dimension(), true);
     }
 
-    private static void sendCurrentMode(ServerPlayer player) {
+    private static void sendCurrentMode(ServerPlayer player, ResourceKey<Level> dimension) {
         if (!player.connection.hasChannel(FlashlightNetwork.FallbackMode.TYPE)) return;
-        boolean fallback = FALLBACK_BY_DIMENSION.getOrDefault(player.level().dimension(), true);
+        boolean fallback = FALLBACK_BY_DIMENSION.getOrDefault(dimension, true);
         player.connection.send(new FlashlightNetwork.FallbackMode(fallback));
     }
 
