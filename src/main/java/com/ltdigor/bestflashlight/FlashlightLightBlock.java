@@ -3,6 +3,7 @@ package com.ltdigor.bestflashlight;
 import com.mojang.serialization.MapCodec;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.util.RandomSource;
@@ -101,10 +102,7 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
             state.setValue(WATERLOGGED, true).setValue(WATER_LEVEL, waterLevel),
             Block.UPDATE_ALL
         );
-        // Do not schedule the fluid itself in this cell: a normal FlowingFluid tick
-        // would replace the carrier with a legacy water block. Neighboring water can
-        // continue spreading through the container contract; restore() restarts the
-        // saved fluid once the light carrier is removed.
+        level.scheduleTick(pos, fluidState.getType(), fluidState.getType().getTickDelay(level));
         return true;
     }
 
@@ -129,7 +127,45 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
     @Override
     protected void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
         super.onPlace(state, level, pos, oldState, movedByPiston);
-        if (!level.isClientSide) level.scheduleTick(pos, this, CLEANUP_DELAY);
+        if (!level.isClientSide) {
+            level.scheduleTick(pos, this, CLEANUP_DELAY);
+            if (state.getValue(WATERLOGGED)) {
+                FluidState fluid = getFluidState(state);
+                level.scheduleTick(pos, fluid.getType(), fluid.getType().getTickDelay(level));
+            }
+        }
+    }
+
+    @Override
+    protected BlockState updateShape(BlockState state, Direction direction, BlockState neighbor,
+                                     LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
+        if (state.getValue(WATERLOGGED)) {
+            FluidState fluid = getFluidState(state);
+            level.scheduleTick(pos, fluid.getType(), fluid.getType().getTickDelay(level));
+        }
+        return super.updateShape(state, direction, neighbor, level, pos, neighborPos);
+    }
+
+    public static boolean preserveCarrierDuringFluidTick(Level level, BlockPos pos,
+                                                         BlockState replacement, int flags) {
+        BlockState current = level.getBlockState(pos);
+        if (!current.is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
+            return level.setBlock(pos, replacement, flags);
+        }
+
+        BlockState next = current;
+        if (replacement.isAir()) {
+            next = current.setValue(WATERLOGGED, false).setValue(WATER_LEVEL, 0);
+        } else if (replacement.is(Blocks.WATER)) {
+            next = current
+                .setValue(WATERLOGGED, true)
+                .setValue(WATER_LEVEL, replacement.getValue(LiquidBlock.LEVEL));
+        } else {
+            return level.setBlock(pos, replacement, flags);
+        }
+
+        if (next == current) return false;
+        return level.setBlock(pos, next, UPDATE_FLAGS);
     }
 
     static void rearmCleanup(ServerLevel level, BlockPos pos) {
