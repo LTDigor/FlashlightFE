@@ -102,9 +102,19 @@ final class OptionalDynamicLights {
 
         ensureInitialized();
         boolean support = available && isDynamicLightingEnabled();
-        reportSupport(connection, support);
 
-        if (!support || serverFallbackEnabled || client.level == null || client.player == null) {
+        // Do not negotiate before the play world and LocalPlayer exist. A support
+        // report sent during the connection transition can arrive before
+        // PlayerLoggedInEvent, then be cleared by server-side join initialization.
+        if (client.level == null || client.player == null) {
+            deactivateAll();
+            reportedSupport = null;
+            readyReported = false;
+            return;
+        }
+
+        reportSupport(connection, support);
+        if (!support || serverFallbackEnabled) {
             deactivateAll();
             readyReported = false;
             return;
