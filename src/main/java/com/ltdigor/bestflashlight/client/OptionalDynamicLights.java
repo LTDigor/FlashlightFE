@@ -2,6 +2,7 @@ package com.ltdigor.bestflashlight.client;
 
 import com.ltdigor.bestflashlight.FlashlightConfig;
 import com.ltdigor.bestflashlight.FlashlightNetwork;
+import com.ltdigor.bestflashlight.LampEnergy;
 import com.ltdigor.bestflashlight.LampSource;
 import com.mojang.logging.LogUtils;
 import java.lang.reflect.Constructor;
@@ -193,6 +194,7 @@ final class OptionalDynamicLights {
             Vec3 selectionLook = look;
             Vec3 selectionEye = eye;
             LampSource source = LampSource.select(player, candidate -> {
+                if (!LampEnergy.hasPower(candidate.stack(), player)) return false;
                 Vec3 candidateEmitter = emitterOrigin(player, candidate, selectionLook, selectionEye);
                 return FlashlightConfig.WORKS_UNDERWATER.get() || !isSubmerged(client.level, candidateEmitter);
             });
