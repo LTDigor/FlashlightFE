@@ -312,6 +312,10 @@ final class OptionalDynamicLights {
                 || Math.abs(halfAngle - newHalfAngle) > VALUE_EPSILON
                 || occlusionChanged(newHitDistances, newHitBlocks);
 
+            if (!changed) return;
+            // Keep the behavior state frozen until we also advance the revision.
+            // Otherwise tiny per-frame changes could alter lightAtPos() forever while
+            // hasChanged() keeps returning false and LDL never rebuilds the affected chunks.
             origin = newOrigin;
             axis = newAxis;
             right = newRight;
@@ -320,7 +324,7 @@ final class OptionalDynamicLights {
             halfAngle = newHalfAngle;
             hitDistances = newHitDistances.clone();
             hitBlocks = newHitBlocks.clone();
-            if (changed) revision++;
+            revision++;
         }
 
         private boolean occlusionChanged(double[] distances, long[] blocks) {
