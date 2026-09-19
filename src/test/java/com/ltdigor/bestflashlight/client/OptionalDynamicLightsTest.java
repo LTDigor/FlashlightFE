@@ -3,6 +3,7 @@ package com.ltdigor.bestflashlight.client;
 import dev.lambdaurora.lambdynlights.api.behavior.DynamicLightBehavior;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
@@ -18,13 +19,21 @@ class OptionalDynamicLightsTest {
         availableField.setAccessible(true);
         assertTrue(availableField.getBoolean(null));
 
-        Field behaviorField = OptionalDynamicLights.class.getDeclaredField("behavior");
+        Method enabled = OptionalDynamicLights.class.getDeclaredMethod("isDynamicLightingEnabled");
+        enabled.setAccessible(true);
+        assertTrue((boolean) enabled.invoke(null));
+
+        Method createCone = OptionalDynamicLights.class.getDeclaredMethod("createCone", UUID.class);
+        createCone.setAccessible(true);
+        Object cone = createCone.invoke(null, UUID.randomUUID());
+
+        Field behaviorField = cone.getClass().getDeclaredField("behavior");
         behaviorField.setAccessible(true);
-        Object reflected = behaviorField.get(null);
+        Object reflected = behaviorField.get(cone);
         assertInstanceOf(DynamicLightBehavior.class, reflected);
 
         DynamicLightBehavior behavior = (DynamicLightBehavior) reflected;
-        assertTrue(behavior.isRemoved(), "An initialized but inactive source must report removed");
+        assertTrue(behavior.isRemoved(), "A newly created inactive source must report removed");
         assertEquals(0.0, behavior.lightAtPos(BlockPos.ZERO, 1.0), 1e-9);
 
         DynamicLightBehavior.BoundingBox box = behavior.getBoundingBox();
