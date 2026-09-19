@@ -125,7 +125,7 @@ public class EnergyGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = "empty", batch = "config")
+    @GameTest(template = "empty", batch = "config_energy_cost")
     public static void creativeBypassesEnergyCostAboveCapacity(GameTestHelper helper) {
         FakePlayer player = player(helper, "creative-high-cost", GameType.CREATIVE);
         int previous = FlashlightConfig.ENERGY_PER_TICK.get();
