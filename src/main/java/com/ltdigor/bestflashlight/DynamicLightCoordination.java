@@ -49,7 +49,7 @@ final class DynamicLightCoordination {
     }
 
     static boolean useServerFallback(ServerPlayer player) {
-        if (!player.connection.hasChannel(FlashlightNetwork.DynamicSupport.TYPE)) return true;
+        if (!supportsCoordinatedMode(player)) return true;
         return FALLBACK_BY_DIMENSION.getOrDefault(player.level().dimension(), true);
     }
 
@@ -62,6 +62,11 @@ final class DynamicLightCoordination {
         FALLBACK_BY_DIMENSION.clear();
     }
 
+    private static boolean supportsCoordinatedMode(ServerPlayer player) {
+        return player.connection.hasChannel(FlashlightNetwork.DynamicSupport.TYPE)
+            && player.connection.hasChannel(FlashlightNetwork.FallbackMode.TYPE);
+    }
+
     private static void recompute(ServerLevel level) {
         recompute(level, null);
     }
@@ -72,8 +77,7 @@ final class DynamicLightCoordination {
             .toList();
 
         boolean nextFallback = players.isEmpty() || players.stream().anyMatch(player ->
-            !player.connection.hasChannel(FlashlightNetwork.DynamicSupport.TYPE)
-                || !ACTIVE_CLIENTS.contains(player.getUUID()));
+            !supportsCoordinatedMode(player) || !ACTIVE_CLIENTS.contains(player.getUUID()));
 
         ResourceKey<Level> dimension = level.dimension();
         boolean previous = FALLBACK_BY_DIMENSION.getOrDefault(dimension, true);
