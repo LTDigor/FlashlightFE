@@ -222,23 +222,34 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void flowingWaterAndWaterPlantsRefuseTemporaryLight(GameTestHelper helper) {
+    public static void flowingWaterSurvivesTemporaryLightAndPlantsStayUntouched(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos flowingPos = helper.absolutePos(new BlockPos(4, 2, 4));
         BlockPos plantPos = helper.absolutePos(new BlockPos(6, 2, 4));
+        UUID owner = UUID.randomUUID();
         level.setBlock(flowingPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 1), 3);
         level.setBlock(plantPos.below(), Blocks.DIRT.defaultBlockState(), 3);
         level.setBlock(plantPos, Blocks.WATER.defaultBlockState(), 3);
         level.setBlock(plantPos, Blocks.SEAGRASS.defaultBlockState(), 3);
 
-        acquire(level, flowingPos, UUID.randomUUID(), 15);
+        acquire(level, flowingPos, owner, 15);
         acquire(level, plantPos, UUID.randomUUID(), 15);
 
-        BlockState flowing = level.getBlockState(flowingPos);
-        helper.assertTrue(flowing.is(Blocks.WATER) && !flowing.getFluidState().isSource(), "Flowing water must not be replaced by temporary light");
-        helper.assertTrue(level.getBlockState(plantPos).is(Blocks.SEAGRASS), "Water plants must not be replaced by temporary light");
-        helper.assertTrue(!FlashlightEvents.isTrackedLight(level.dimension(), flowingPos), "Refused flowing water must not retain ownership");
-        helper.assertTrue(!FlashlightEvents.isTrackedLight(level.dimension(), plantPos), "Refused water plants must not retain ownership");
+        BlockState light = level.getBlockState(flowingPos);
+        helper.assertTrue(light.is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Flowing water must accept a temporary light carrier");
+        helper.assertTrue(light.getValue(FlashlightLightBlock.WATERLOGGED)
+                && light.getValue(FlashlightLightBlock.WATER_LEVEL) == 1,
+            "Temporary carrier must remember the exact flowing-water level");
+        helper.assertTrue(level.getBlockState(plantPos).is(Blocks.SEAGRASS),
+            "Water plants must not be replaced by temporary light");
+        helper.assertTrue(!FlashlightEvents.isTrackedLight(level.dimension(), plantPos),
+            "Refused water plants must not retain ownership");
+
+        release(level, flowingPos, owner);
+        BlockState restored = level.getBlockState(flowingPos);
+        helper.assertTrue(restored.is(Blocks.WATER) && restored.getValue(LiquidBlock.LEVEL) == 1,
+            "Final owner release must restore the original flowing-water level");
         helper.succeed();
     }
 
@@ -263,6 +274,23 @@ public class BeamGameTests {
         BlockState restored = level.getBlockState(pos);
         helper.assertTrue(restored.is(Blocks.WATER), "Releasing the final owner must restore source water");
         helper.assertTrue(restored.getFluidState().isSource(), "Restored water must remain a source block");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void orphanCleanupRestoresFlowingWaterLevel(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockState light = FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState()
+            .setValue(FlashlightLightBlock.WATERLOGGED, true)
+            .setValue(FlashlightLightBlock.WATER_LEVEL, 5);
+        level.setBlock(pos, light, 3);
+
+        ((FlashlightLightBlock) FlashlightMod.FLASHLIGHT_LIGHT.get()).tick(level.getBlockState(pos), level, pos, level.random);
+
+        BlockState restored = level.getBlockState(pos);
+        helper.assertTrue(restored.is(Blocks.WATER) && restored.getValue(LiquidBlock.LEVEL) == 5,
+            "Orphan cleanup must restore the exact flowing-water level");
         helper.succeed();
     }
 
