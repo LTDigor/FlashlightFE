@@ -55,24 +55,26 @@ public final class FlashlightEvents {
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         LampSource.returnInvalidFlashlights(player);
-        LampSource source = player.isAlive() && !player.isSpectator() ? LampSource.select(player) : null;
-        if (source == null) {
+        if (!player.isAlive() || player.isSpectator()) {
             clearPlayer(player);
             return;
         }
 
-        if (!LampEnergy.hasPower(source.stack(), player)) {
-            LampData.setEnabled(source.stack(), false);
-            clearPlayer(player);
-            return;
-        }
         ServerLevel level = player.serverLevel();
         Vec3 look = player.getLookAngle().normalize();
-        Vec3 emitter = emitterOrigin(player, source, look);
-        if (!FlashlightConfig.WORKS_UNDERWATER.get() && isSubmerged(level, emitter)) {
+        LampSource source = LampSource.select(player, candidate -> {
+            if (!LampEnergy.hasPower(candidate.stack(), player)) {
+                LampData.setEnabled(candidate.stack(), false);
+                return false;
+            }
+            Vec3 candidateEmitter = emitterOrigin(player, candidate, look);
+            return FlashlightConfig.WORKS_UNDERWATER.get() || !isSubmerged(level, candidateEmitter);
+        });
+        if (source == null) {
             clearPlayer(player);
             return;
         }
+        Vec3 emitter = emitterOrigin(player, source, look);
 
         // A hand/head model may geometrically overlap a nearby wall. That must not turn
         // the lamp off: start tracing from the eyes and let each beam ray stop at the wall.
