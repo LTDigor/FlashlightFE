@@ -148,6 +148,7 @@ final class OptionalDynamicLights {
         }
 
         coneState.update(start, axis, right, up, range, halfAngle, hitDistances, hitBlocks);
+        coneState.setActive(true);
         activeLevel = client.level;
         if (!added) {
             try {
@@ -209,14 +210,15 @@ final class OptionalDynamicLights {
 
     private static Object invokeBehavior(Object proxy, Method method, Object[] args) throws ReflectiveOperationException {
         return switch (method.getName()) {
-            case "lightAtPos" -> coneState.lightAt((BlockPos) args[0]);
+            case "lightAtPos" -> available && coneState != null && coneState.isActive()
+                ? coneState.lightAt((BlockPos) args[0]) : 0.0;
             case "getBoundingBox" -> {
                 int[] bounds = coneState.bounds();
                 yield boundingBoxConstructor.newInstance(
                     bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]);
             }
-            case "hasChanged" -> coneState.hasChanged();
-            case "isRemoved" -> false;
+            case "hasChanged" -> coneState != null && coneState.hasChanged();
+            case "isRemoved" -> !available || coneState == null || !coneState.isActive();
             case "toString" -> "FlashlightFE dynamic cone";
             case "hashCode" -> System.identityHashCode(proxy);
             case "equals" -> proxy == args[0];
@@ -225,32 +227,45 @@ final class OptionalDynamicLights {
     }
 
     private static void deactivate() {
-        removeBehaviorQuietly();
+        if (coneState != null) coneState.setActive(false);
+        if (!removeBehaviorQuietly()) {
+            // Do not attempt to add this proxy again after a failed removal. The proxy's
+            // isRemoved() now returns true, so LDL can also discard a leaked source itself.
+            available = false;
+            manager = null;
+            add = null;
+            remove = null;
+        }
         activeLevel = null;
         smoothDirection = null;
         lastFrameNanos = 0L;
     }
 
-    private static void removeBehaviorQuietly() {
-        if (!added) return;
+    private static boolean removeBehaviorQuietly() {
+        if (!added) return true;
+        boolean removed = true;
         try {
-            if (manager != null && behavior != null && remove != null) remove.invoke(manager, behavior);
+            if (manager != null && behavior != null && remove != null) {
+                remove.invoke(manager, behavior);
+            }
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
             // The LDL world/manager can disappear during client world teardown.
+            removed = false;
         } finally {
             added = false;
         }
+        return removed;
     }
 
     private static void disable() {
+        if (coneState != null) coneState.setActive(false);
         removeBehaviorQuietly();
         available = false;
         manager = null;
-        behavior = null;
         add = null;
         remove = null;
-        boundingBoxConstructor = null;
-        coneState = null;
+        // Keep the proxy/state metadata alive if registration partially succeeded:
+        // a leaked LDL reference can then return zero light and isRemoved() == true.
         activeLevel = null;
         smoothDirection = null;
         lastFrameNanos = 0L;
@@ -274,8 +289,20 @@ final class OptionalDynamicLights {
         private double halfAngle = Math.toRadians(7.5);
         private double[] hitDistances = new double[SAMPLE_X.length];
         private long[] hitBlocks = new long[SAMPLE_X.length];
+        private boolean active;
         private long revision = 1L;
         private long reportedRevision;
+
+        private void setActive(boolean value) {
+            if (active != value) {
+                active = value;
+                revision++;
+            }
+        }
+
+        private boolean isActive() {
+            return active;
+        }
 
         private void update(Vec3 newOrigin, Vec3 newAxis, Vec3 newRight, Vec3 newUp,
                             double newRange, double newHalfAngle, double[] newHitDistances, long[] newHitBlocks) {
