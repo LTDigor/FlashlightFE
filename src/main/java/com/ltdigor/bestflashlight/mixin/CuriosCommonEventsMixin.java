@@ -9,19 +9,22 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import top.theillusivec4.curios.common.CuriosCommonEvents;
 
-@Mixin(CuriosCommonEvents.class)
+@Pseudo
+@Mixin(targets = "top.theillusivec4.curios.common.CuriosCommonEvents", remap = false)
 abstract class CuriosCommonEventsMixin {
     @Redirect(
         method = "tick",
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/world/item/ItemStack;matches(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/item/ItemStack;)Z"
+            target = "Lnet/minecraft/world/item/ItemStack;matches(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/item/ItemStack;)Z",
+            remap = false
         ),
-        require = 0
+        require = 0,
+        remap = false
     )
     private boolean bestflashlight$syncEnergyWithoutCuriosStateChurn(
         ItemStack current,
@@ -38,8 +41,9 @@ abstract class CuriosCommonEventsMixin {
 
             ItemStack currentLamp = LampData.mounted(current);
             if (!currentLamp.isEmpty()) {
-                // Advance Curios' previous snapshot so this ENERGY-only change does not
-                // trigger a State event, modifier rebuild, or tracking SPacketSyncStack.
+                // getPreviousStackInSlot returns Curios' mutable previous snapshot.
+                // Advancing only the mounted ENERGY state avoids a CurioChangeEvent,
+                // modifier rebuild, and tracking SPacketSyncStack for every FE drain tick.
                 LampData.mount(previous, currentLamp);
             }
             return true;
