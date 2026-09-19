@@ -28,12 +28,16 @@ import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 public final class FlashlightEvents {
     private static final Map<ResourceKey<Level>, Map<BlockPos, Map<UUID, Integer>>> LIGHT_OWNERS = new HashMap<>();
     private static final Map<UUID, PlayerBeam> PLAYER_BEAMS = new HashMap<>();
+    private static final Map<UUID, BeamCache> BEAM_CACHE = new HashMap<>();
 
     // Integer points inside a radius-three disk give 29 directions, including the
     // axis and cone edges. This keeps fallback quality while cutting server ray work
     // by about 41% compared with the previous 49-ray disk.
     private static final int DIRECTION_RADIUS = 3;
     private static final int MAX_RAY_CELLS = 128;
+    private static final int STATIC_BEAM_REFRESH_TICKS = 4;
+    private static final double CACHE_POSITION_EPSILON_SQR = 0.01 * 0.01;
+    private static final double CACHE_DIRECTION_DOT = Math.cos(Math.toRadians(0.20));
 
     // Vanilla block light itself is isotropic. For a headlamp, only the terminal cells
     // of the forward rays become emitters. Their brightness grows with distance so the
@@ -78,27 +82,44 @@ public final class FlashlightEvents {
             return;
         }
         Vec3 emitter = emitterOrigin(player, source, look);
+        UUID owner = player.getUUID();
 
         // In an all-LDL session every client renders every tracked player's cone.
         // Keep FE and source validation authoritative on the server, but skip the
-        // expensive 49-ray temporary block-light beam entirely.
+        // temporary block-light beam entirely.
         if (!DynamicLightCoordination.useServerFallback(player)) {
             clearPlayer(player);
+            BEAM_CACHE.remove(owner);
             LampEnergy.consume(source.stack(), player);
+            return;
+        }
+
+        Vec3 eye = player.getEyePosition();
+        long gameTick = level.getGameTime();
+        BeamCache cached = BEAM_CACHE.get(owner);
+        PlayerBeam previous = PLAYER_BEAMS.get(owner);
+        boolean reuse = cached != null
+            && previous != null
+            && cached.dimension().equals(level.dimension())
+            && cached.headMounted() == source.headMounted()
+            && cached.offHand() == source.offHand()
+            && cached.eye().distanceToSqr(eye) <= CACHE_POSITION_EPSILON_SQR
+            && cached.emitter().distanceToSqr(emitter) <= CACHE_POSITION_EPSILON_SQR
+            && cached.look().dot(look) >= CACHE_DIRECTION_DOT
+            && gameTick - cached.computedAtTick() < STATIC_BEAM_REFRESH_TICKS;
+
+        if (reuse) {
+            if (!LampEnergy.consume(source.stack(), player)) clearPlayer(player);
             return;
         }
 
         // A hand/head model may geometrically overlap a nearby wall. That must not turn
         // the lamp off: start tracing from the eyes and let each beam ray stop at the wall.
-        Vec3 eye = player.getEyePosition();
         Vec3 origin = emitterPathClear(player, level, emitter) ? emitter : eye;
         Map<BlockPos, Integer> next;
         if (source.headMounted()) {
             next = computeHeadMountedBeam(player, level, origin, look);
             if (next.isEmpty()) {
-                // If the wall is inside the headlamp's near field there is no terminal
-                // cell far enough in front. Keep one dim local source instead of making
-                // the lamp blink off or recreating a bright 360-degree halo.
                 next = closeWallFallback(level, eye, look, HEAD_MOUNTED_CLOSE_WALL_LEVEL);
             }
         } else {
@@ -109,12 +130,11 @@ public final class FlashlightEvents {
         }
 
         if (next.isEmpty() || !LampEnergy.consume(source.stack(), player)) {
+            BEAM_CACHE.remove(owner);
             clearPlayer(player);
             return;
         }
 
-        UUID owner = player.getUUID();
-        PlayerBeam previous = PLAYER_BEAMS.get(owner);
         if (previous != null && !previous.dimension().equals(level.dimension())) {
             clearPlayer(player);
             previous = null;
@@ -128,6 +148,9 @@ public final class FlashlightEvents {
             acquireLight(level, level.dimension(), entry.getKey(), owner, entry.getValue());
         }
         PLAYER_BEAMS.put(owner, new PlayerBeam(level.dimension(), new HashSet<>(next.keySet())));
+        BEAM_CACHE.put(owner, new BeamCache(
+            level.dimension(), eye, emitter, look, source.headMounted(), source.offHand(), gameTick
+        ));
     }
 
     private static Vec3 emitterOrigin(ServerPlayer player, LampSource source, Vec3 look) {
@@ -423,10 +446,12 @@ public final class FlashlightEvents {
     }
 
     private static void clearPlayer(ServerPlayer player) {
-        PlayerBeam previous = PLAYER_BEAMS.remove(player.getUUID());
+        UUID owner = player.getUUID();
+        BEAM_CACHE.remove(owner);
+        PlayerBeam previous = PLAYER_BEAMS.remove(owner);
         if (previous == null) return;
         ServerLevel level = player.getServer().getLevel(previous.dimension());
-        for (BlockPos pos : previous.positions()) releaseLight(level, previous.dimension(), pos, player.getUUID());
+        for (BlockPos pos : previous.positions()) releaseLight(level, previous.dimension(), pos, owner);
     }
 
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
@@ -453,15 +478,19 @@ public final class FlashlightEvents {
         if (event.getLevel() instanceof ServerLevel level) {
             LIGHT_OWNERS.remove(level.dimension());
             PLAYER_BEAMS.values().removeIf(beam -> beam.dimension().equals(level.dimension()));
+            BEAM_CACHE.values().removeIf(cache -> cache.dimension().equals(level.dimension()));
         }
     }
 
     private static void onServerStopped(ServerStoppedEvent event) {
         LIGHT_OWNERS.clear();
         PLAYER_BEAMS.clear();
+        BEAM_CACHE.clear();
         DynamicLightCoordination.reset();
         LampSource.clearLegacyChecks();
     }
 
     private record PlayerBeam(ResourceKey<Level> dimension, Set<BlockPos> positions) {}
+    private record BeamCache(ResourceKey<Level> dimension, Vec3 eye, Vec3 emitter, Vec3 look,
+                             boolean headMounted, boolean offHand, long computedAtTick) {}
 }
