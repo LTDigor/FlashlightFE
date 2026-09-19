@@ -11,6 +11,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -100,7 +102,9 @@ final class OptionalDynamicLights {
             deactivate();
             return;
         }
-        if (!FlashlightConfig.WORKS_UNDERWATER.get() && isSubmerged(client.level, start)) {
+        Vec3 emitter = emitterOrigin(client.player, source, target.normalize());
+        if (!firstPerson) start = emitter;
+        if (!FlashlightConfig.WORKS_UNDERWATER.get() && isSubmerged(client.level, emitter)) {
             deactivate();
             return;
         }
@@ -152,6 +156,15 @@ final class OptionalDynamicLights {
                 disable();
             }
         }
+    }
+
+    private static Vec3 emitterOrigin(Player player, LampSource source, Vec3 look) {
+        Vec3 eye = player.getEyePosition();
+        if (source.headMounted()) return eye.add(look.scale(0.45)).add(0.0, 0.15, 0.0);
+        double yaw = Math.toRadians(player.getYRot());
+        Vec3 right = new Vec3(-Math.cos(yaw), 0.0, -Math.sin(yaw));
+        boolean rightHand = (player.getMainArm() == HumanoidArm.RIGHT) != source.offHand();
+        return eye.add(look.scale(0.55)).add(right.scale(rightHand ? 0.35 : -0.35)).add(0.0, -0.45, 0.0);
     }
 
     private static boolean isSubmerged(ClientLevel level, Vec3 origin) {
