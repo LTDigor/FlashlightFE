@@ -112,6 +112,40 @@ public class IntegrationGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void replacingCarrierInvalidatesOwnerBeamCacheImmediately(GameTestHelper helper) {
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "carrier-cache"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
+            player.setYRot(0.0F);
+            player.setXRot(0.0F);
+            ItemStack lamp = lamp(20);
+            LampData.setEnabled(lamp, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            helper.assertTrue(beamCache(player.getUUID()) != null,
+                "Emitting player must own a server beam cache");
+
+            BlockPos carrier = null;
+            for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 15)) {
+                if (helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
+                    carrier = helper.absolutePos(pos);
+                    break;
+                }
+            }
+            helper.assertTrue(carrier != null, "Beam must place at least one temporary carrier");
+
+            helper.getLevel().setBlock(carrier, Blocks.STONE.defaultBlockState(), 3);
+
+            helper.assertTrue(beamCache(player.getUUID()) == null,
+                "Replacing an owned carrier must invalidate the owner's cached beam immediately");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void staticBeamCacheStillDrainsAndInvalidatesOnMovement(GameTestHelper helper) {
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
             new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "beam-cache"));
