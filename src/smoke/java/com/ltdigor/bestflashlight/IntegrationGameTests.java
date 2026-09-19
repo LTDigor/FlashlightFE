@@ -114,7 +114,7 @@ public class IntegrationGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = "empty", batch = "config")
+    @GameTest(template = "empty", batch = "config_underwater_fallback")
     public static void submergedHandheldDoesNotStarveDryHeadband(GameTestHelper helper) {
         boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
@@ -152,7 +152,7 @@ public class IntegrationGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = "empty", batch = "config")
+    @GameTest(template = "empty", batch = "config_underwater_zero_cost")
     public static void waterDisabledAndZeroCostBehave(GameTestHelper helper) {
         boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
         int originalEnergyPerTick = FlashlightConfig.ENERGY_PER_TICK.get();
