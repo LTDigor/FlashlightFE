@@ -494,9 +494,8 @@ final class OptionalDynamicLights {
                 smoothDirection = target.normalize();
             }
             Vec3 axis = smoothDirection.normalize();
-            Vec3[] basis = basis(axis);
-            Vec3 right = basis[0];
-            Vec3 up = basis[1];
+            Vec3 right = rightVector(axis);
+            Vec3 up = right.cross(axis).normalize();
 
             boolean refreshOcclusion = hitDistances == null || hitBlocks == null
                 || lastProbeStart == null || lastProbeAxis == null
@@ -547,19 +546,18 @@ final class OptionalDynamicLights {
             Vec3 axis = smoothDirection == null || smoothDirection.lengthSqr() < 1.0E-12
                 ? target.normalize()
                 : smoothDirection.normalize();
-            Vec3[] basis = basis(axis);
-            state.updateGeometry(start, axis, basis[0], basis[1], range, halfAngle);
+            Vec3 right = rightVector(axis);
+            Vec3 up = right.cross(axis).normalize();
+            state.updateGeometry(start, axis, right, up, range, halfAngle);
             geometryInitialized = true;
             state.setActive(true);
         }
 
-        private static Vec3[] basis(Vec3 axis) {
+        private static Vec3 rightVector(Vec3 axis) {
             Vec3 reference = Math.abs(axis.y) > 0.99
                 ? new Vec3(1.0, 0.0, 0.0)
                 : new Vec3(0.0, 1.0, 0.0);
-            Vec3 right = axis.cross(reference).normalize();
-            Vec3 up = right.cross(axis).normalize();
-            return new Vec3[]{right, up};
+            return axis.cross(reference).normalize();
         }
     }
 
