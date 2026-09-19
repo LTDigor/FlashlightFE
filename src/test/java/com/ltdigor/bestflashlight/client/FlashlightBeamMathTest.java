@@ -25,6 +25,18 @@ class FlashlightBeamMathTest {
         assertEquals(target, FlashlightBeamMath.smooth(previous, target, 1.0));
     }
 
+    @Test void exactHalfTurnDoesNotStallOnPreviousDirection() {
+        Vec3 previous = new Vec3(0, 0, 1);
+        Vec3 target = new Vec3(0, 0, -1);
+        Vec3 result = FlashlightBeamMath.smooth(previous, target, 0.38);
+
+        assertEquals(1.0, result.length(), EPS);
+        assertTrue(result.distanceTo(previous) > 0.1,
+            "An exact 180-degree turn must move away from the previous direction");
+        assertTrue(result.dot(target) > previous.dot(target),
+            "Smoothing must make progress toward the new direction");
+    }
+
     @Test void smoothingIsFrameRateIndependent() {
         double at60 = FlashlightBeamMath.frameIndependentFactor(0.38, 1.0 / 60.0, 60.0);
         double at120 = FlashlightBeamMath.frameIndependentFactor(0.38, 1.0 / 120.0, 60.0);
