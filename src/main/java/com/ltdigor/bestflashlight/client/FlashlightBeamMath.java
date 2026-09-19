@@ -132,8 +132,9 @@ final class FlashlightBeamMath {
      * must remain illuminated. This is what fixes the "flashlight turns off at a wall"
      * case without pushing the light source through the wall.
      */
-    static boolean visibleAtSample(BlockPos target, double pointDistance, double hitDistance, long hitBlock) {
+    static boolean visibleAtSample(BlockPos target, double distanceAlongSampleRay,
+                                   double hitDistance, long hitBlock) {
         if (hitBlock != NO_HIT_BLOCK && target.asLong() == hitBlock) return true;
-        return pointDistance <= hitDistance + HIT_EPSILON;
+        return distanceAlongSampleRay <= hitDistance + HIT_EPSILON;
     }
 }
