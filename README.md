@@ -43,7 +43,7 @@ The handheld has a black mechanical button in a metal rim. Each accepted press a
 
 ## Configuration
 
-NeoForge creates `config/bestflashlight-server.toml`, synchronizes it to clients and applies changes after a world/server restart.
+NeoForge uses `config/bestflashlight-server.toml` as the default server config. If `<world>/serverconfig/bestflashlight-server.toml` exists, that world-specific file overrides the global default. Server values are synchronized to clients and world-restart settings apply after restarting the world/server.
 
 | Setting | Default | Meaning |
 |---|---:|---|
