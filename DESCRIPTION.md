@@ -32,7 +32,7 @@ Server defaults are read from `config/bestflashlight-server.toml`; an existing `
 | `coneAngleDegrees` | 15 degrees | Full beam angle, configurable from 1 to 90 |
 | `worksUnderwater` | true | Whether submerged lamps work |
 
-At 20 TPS, the default full battery provides about **8 minutes 20 seconds** of light. The beam uses Minecraft block lighting, so some soft light spreads outside the cone. Switching out of creative restores normal energy requirements.
+At 20 TPS, the default full battery provides about **8 minutes 20 seconds** of light. Without LambDynamicLights, the compatibility beam uses Minecraft block lighting, so some soft light spreads outside the cone. Switching out of creative restores normal energy requirements.
 
 ## Requirements
 
