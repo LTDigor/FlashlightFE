@@ -7,7 +7,7 @@
 - Make beam smoothing frame-rate independent and stable across exact or near-180-degree turns.
 - Align third-person dynamic beam origin with interpolated player motion and the actual handheld/headlamp emitter.
 - Respect FE and underwater settings in the optional dynamic-light path, fall through unusable higher-priority lamps in the same tick, and clean up dynamic sources safely across world changes and failures.
-- Preserve exact source/flowing-water state in temporary light carriers, keep vanilla source-water bucket pickup semantics, freeze conflicting fluid ticks while a carrier is active, and rearm orphan cleanup after chunk reloads.
+- Preserve exact source/flowing-water state in temporary light carriers, keep vanilla source-water bucket pickup semantics, let vanilla water simulation continue without replacing the active light carrier, and rearm orphan cleanup after chunk reloads.
 - Cache static server beam geometry and client occlusion probes between bounded refreshes, reduce fallback sampling from 49 to 29 rays, and avoid per-tick full ItemStack sync for FE-only drain while preserving authoritative owner charge updates.
 - Switch survival lamps off immediately after their final affordable FE tick and fall through unusable/multiple Curios headband sources correctly.
 - Add regression coverage for cone geometry, wall clipping, water lifecycle/buckets, FE synchronization, cache invalidation, optional LDL API compatibility and close-wall server behavior.
