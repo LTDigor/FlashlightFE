@@ -419,6 +419,8 @@ final class OptionalDynamicLights {
         private Vec3 smoothDirection;
         private Vec3 lastProbeStart;
         private Vec3 lastProbeAxis;
+        private double lastProbeRange = Double.NaN;
+        private double lastProbeHalfAngle = Double.NaN;
         private double[] hitDistances;
         private long[] hitBlocks;
         private int ticksSinceProbe = STATIC_OCCLUSION_REFRESH_TICKS;
@@ -448,6 +450,8 @@ final class OptionalDynamicLights {
                 || lastProbeStart == null || lastProbeAxis == null
                 || lastProbeStart.distanceToSqr(start) > OCCLUSION_POSITION_EPSILON_SQR
                 || lastProbeAxis.dot(axis) < OCCLUSION_DIRECTION_DOT
+                || Double.compare(lastProbeRange, range) != 0
+                || Double.compare(lastProbeHalfAngle, halfAngle) != 0
                 || ticksSinceProbe >= STATIC_OCCLUSION_REFRESH_TICKS;
 
             if (refreshOcclusion) {
@@ -469,6 +473,8 @@ final class OptionalDynamicLights {
                 }
                 lastProbeStart = start;
                 lastProbeAxis = axis;
+                lastProbeRange = range;
+                lastProbeHalfAngle = halfAngle;
                 ticksSinceProbe = 0;
             } else {
                 ticksSinceProbe++;
