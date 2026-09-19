@@ -252,6 +252,7 @@ final class OptionalDynamicLights {
             DynamicCone cone = CONES.computeIfAbsent(player.getUUID(), OptionalDynamicLights::createCone);
             boolean localFirstPerson = player == client.player && client.options.getCameraType().isFirstPerson();
             boolean useEmitter = !localFirstPerson && emitterPathClear(client.level, player, eye, emitter);
+            if (!localFirstPerson) start = useEmitter ? emitter : eye;
             cone.configureSource(source.headMounted(), source.offHand(), useEmitter);
             cone.tickUpdate(client.level, player, start, target, range, halfAngle);
             if (!cone.added && !addCone(cone)) {
