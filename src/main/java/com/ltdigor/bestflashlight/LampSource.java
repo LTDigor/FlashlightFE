@@ -47,6 +47,19 @@ public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) 
         }).orElse(ItemStack.EMPTY);
     }
 
+    public static ItemStack headband(LivingEntity entity, int slotIndex) {
+        return CuriosApi.getCuriosInventory(entity).map(inventory -> {
+            var head = inventory.getCurios().get("head");
+            if (head == null) return ItemStack.EMPTY;
+            var items = head.getStacks();
+            if (slotIndex < 0 || slotIndex >= items.getSlots()) return ItemStack.EMPTY;
+            ItemStack stack = items.getStackInSlot(slotIndex);
+            return stack.getItem() instanceof HeadbandItem && !LampData.mounted(stack).isEmpty()
+                ? stack
+                : ItemStack.EMPTY;
+        }).orElse(ItemStack.EMPTY);
+    }
+
     public static LampSource select(LivingEntity entity) {
         return select(entity, source -> true);
     }
