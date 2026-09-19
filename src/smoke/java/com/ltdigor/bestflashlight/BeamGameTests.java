@@ -2,6 +2,7 @@ package com.ltdigor.bestflashlight;
 
 import com.mojang.authlib.GameProfile;
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -18,6 +19,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -422,6 +424,33 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void diagonalCornerCollisionBlocksOrientationIndependentRay(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer player = geometryPlayer(level, helper.absoluteVec(new Vec3(4.5, 2.5, 4.5)));
+        try {
+            BlockPos startCell = BlockPos.containing(player.position());
+            Vec3 origin = player.position();
+            Vec3 end = origin.add(4.0, 4.0, 0.0);
+            Vec3 axis = end.subtract(origin).normalize();
+
+            // At the first X/Y corner crossing the old X-first traversal checked
+            // (x+1,y), then the diagonal, but skipped this (x,y+1) side cell.
+            level.setBlock(startCell.above(), Blocks.STONE.defaultBlockState(), 3);
+
+            Map<BlockPos, BlockState> states = new HashMap<>();
+            Map<BlockPos, Integer> result = new HashMap<>();
+            invokeTraceRay(level, origin, end, axis, origin.distanceTo(end),
+                CollisionContext.of(player), states, result);
+
+            helper.assertTrue(!result.containsKey(startCell.offset(1, 1, 0)),
+                "A solid touching an exact voxel corner from either side must block diagonal continuation");
+        } finally {
+            player.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void sourceWaterSurvivesLightLifecycle(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
@@ -526,6 +555,18 @@ public class BeamGameTests {
             return (Map<BlockPos, Integer>) method.invoke(null, player, level, origin, look);
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError("Could not invoke FlashlightEvents.computeBeam", exception);
+        }
+    }
+
+    private static void invokeTraceRay(ServerLevel level, Vec3 origin, Vec3 end, Vec3 axis, double range,
+                                       CollisionContext context, Map<BlockPos, BlockState> states,
+                                       Map<BlockPos, Integer> result) {
+        try {
+            Method method = findLifecycleMethod("traceRay", 8);
+            method.setAccessible(true);
+            method.invoke(null, level, origin, end, axis, range, context, states, result);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not invoke FlashlightEvents.traceRay", exception);
         }
     }
 
