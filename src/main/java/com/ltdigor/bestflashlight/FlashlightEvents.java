@@ -319,18 +319,12 @@ public final class FlashlightEvents {
 
             double next = Math.min(crossX, Math.min(crossY, crossZ));
             if (next > 1.0) return;
-            // Advance one boundary at a time. Ties visit the adjacent boundary cell
-            // too, preventing diagonal rays from slipping through touching solids.
-            if (crossX <= crossY && crossX <= crossZ) {
-                x += stepX;
-                crossX += strideX;
-            } else if (crossY <= crossZ) {
-                y += stepY;
-                crossY += strideY;
-            } else {
-                z += stepZ;
-                crossZ += strideZ;
-            }
+            int tiedAxes = tiedAxes(crossX, crossY, crossZ, next);
+            if (boundaryCollision(level, origin, end, context, states,
+                                  x, y, z, stepX, stepY, stepZ, tiedAxes)) return;
+            if ((tiedAxes & 1) != 0) { x += stepX; crossX += strideX; }
+            if ((tiedAxes & 2) != 0) { y += stepY; crossY += strideY; }
+            if ((tiedAxes & 4) != 0) { z += stepZ; crossZ += strideZ; }
         }
     }
 
@@ -363,16 +357,12 @@ public final class FlashlightEvents {
 
             double next = Math.min(crossX, Math.min(crossY, crossZ));
             if (next > 1.0) break;
-            if (crossX <= crossY && crossX <= crossZ) {
-                x += stepX;
-                crossX += strideX;
-            } else if (crossY <= crossZ) {
-                y += stepY;
-                crossY += strideY;
-            } else {
-                z += stepZ;
-                crossZ += strideZ;
-            }
+            int tiedAxes = tiedAxes(crossX, crossY, crossZ, next);
+            if (boundaryCollision(level, origin, end, context, states,
+                                  x, y, z, stepX, stepY, stepZ, tiedAxes)) break;
+            if ((tiedAxes & 1) != 0) { x += stepX; crossX += strideX; }
+            if ((tiedAxes & 2) != 0) { y += stepY; crossY += strideY; }
+            if ((tiedAxes & 4) != 0) { z += stepZ; crossZ += strideZ; }
         }
 
         if (terminal != null) {
@@ -385,6 +375,39 @@ public final class FlashlightEvents {
             );
             result.merge(terminal, brightness, Math::max);
         }
+    }
+
+    private static int tiedAxes(double crossX, double crossY, double crossZ, double next) {
+        final double epsilon = 1.0E-12;
+        int axes = 0;
+        if (Math.abs(crossX - next) <= epsilon) axes |= 1;
+        if (Math.abs(crossY - next) <= epsilon) axes |= 2;
+        if (Math.abs(crossZ - next) <= epsilon) axes |= 4;
+        return axes;
+    }
+
+    /**
+     * At an exact edge/corner crossing a ray touches multiple neighboring voxels at
+     * the same parameter value. Check every proper non-empty subset of the tied axes
+     * before advancing to the diagonal cell so traversal is orientation-independent.
+     */
+    private static boolean boundaryCollision(ServerLevel level, Vec3 origin, Vec3 end,
+                                             CollisionContext context, Map<BlockPos, BlockState> states,
+                                             int x, int y, int z, int stepX, int stepY, int stepZ,
+                                             int tiedAxes) {
+        if (Integer.bitCount(tiedAxes) <= 1) return false;
+        for (int subset = tiedAxes; subset > 0; subset = (subset - 1) & tiedAxes) {
+            if (subset == tiedAxes) continue; // The fully advanced cell is visited next.
+            BlockPos pos = new BlockPos(
+                x + ((subset & 1) != 0 ? stepX : 0),
+                y + ((subset & 2) != 0 ? stepY : 0),
+                z + ((subset & 4) != 0 ? stepZ : 0)
+            );
+            if (!loaded(level, pos)) return true;
+            BlockState state = states.computeIfAbsent(pos, level::getBlockState);
+            if (state.getCollisionShape(level, pos, context).clip(origin, end, pos) != null) return true;
+        }
+        return false;
     }
 
     private static double firstCrossing(double start, int cell, double delta, int step) {
