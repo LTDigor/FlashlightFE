@@ -167,13 +167,14 @@ public final class FlashlightEvents {
             // whole BlockState is not replaceable, so the forward scan has nowhere to
             // place a temporary light even though the player is standing in free space.
             // Walk back toward the camera side and use the first replaceable cell there.
+            BlockPos eyePos = BlockPos.containing(eye);
             for (double distance = 0.125; distance <= 1.25; distance += 0.125) {
                 BlockPos pos = BlockPos.containing(eye.subtract(axis.scale(distance)));
                 if (!loaded(level, pos)) break;
-                if (acceptsLight(level.getBlockState(pos))) {
-                    best = pos;
-                    break;
-                }
+                if (pos.equals(eyePos)) continue;
+                if (!acceptsLight(level.getBlockState(pos))) break;
+                best = pos;
+                break;
             }
         }
         if (best == null) {
