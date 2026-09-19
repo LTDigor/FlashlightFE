@@ -1,15 +1,20 @@
 package com.ltdigor.bestflashlight;
 
-import net.minecraft.world.entity.LivingEntity;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import top.theillusivec4.curios.api.CuriosApi;
 
 /** Shared source selection for input, beam origin and energy consumption. */
 public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) {
-    /** Recover legacy handheld Curios through Curios' own inventory/drop path. */
+    private static final Set<UUID> LEGACY_CHECKED = new HashSet<>();
+
+    /** Recover legacy handheld Curios through Curios' own inventory/drop path once per login. */
     public static void returnInvalidFlashlights(LivingEntity entity) {
-        if (entity.level().isClientSide()) return;
+        if (entity.level().isClientSide() || !LEGACY_CHECKED.add(entity.getUUID())) return;
         CuriosApi.getCuriosInventory(entity).ifPresent(inventory -> {
             boolean changed = false;
             for (var slot : inventory.getCurios().values()) {
@@ -68,6 +73,14 @@ public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) 
             if (usable.test(source)) return source;
         }
         return null;
+    }
+
+    static void resetLegacyCheck(UUID player) {
+        LEGACY_CHECKED.remove(player);
+    }
+
+    static void clearLegacyChecks() {
+        LEGACY_CHECKED.clear();
     }
 
     public static String toggleTarget(LivingEntity entity) {
