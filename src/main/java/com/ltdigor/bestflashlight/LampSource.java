@@ -36,14 +36,16 @@ public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) 
     public static ItemStack headband(LivingEntity entity) {
         return CuriosApi.getCuriosInventory(entity).map(inventory -> {
             var head = inventory.getCurios().get("head");
-            if (head != null) {
-                var items = head.getStacks();
-                for (int i = 0; i < items.getSlots(); i++) {
-                    ItemStack stack = items.getStackInSlot(i);
-                    if (stack.getItem() instanceof HeadbandItem && !LampData.mounted(stack).isEmpty()) return stack;
-                }
+            if (head == null) return ItemStack.EMPTY;
+            var items = head.getStacks();
+            ItemStack firstLoaded = ItemStack.EMPTY;
+            for (int i = 0; i < items.getSlots(); i++) {
+                ItemStack stack = items.getStackInSlot(i);
+                if (!(stack.getItem() instanceof HeadbandItem) || LampData.mounted(stack).isEmpty()) continue;
+                if (firstLoaded.isEmpty()) firstLoaded = stack;
+                if (LampData.enabled(stack)) return stack;
             }
-            return ItemStack.EMPTY;
+            return firstLoaded;
         }).orElse(ItemStack.EMPTY);
     }
 
