@@ -128,12 +128,12 @@ public final class FlashlightEvents {
         if (source.headMounted()) {
             next = computeHeadMountedBeam(player, level, origin, look);
             if (next.isEmpty()) {
-                next = closeWallFallback(level, eye, look, HEAD_MOUNTED_CLOSE_WALL_LEVEL);
+                next = closeWallFallback(player, level, eye, look, HEAD_MOUNTED_CLOSE_WALL_LEVEL);
             }
         } else {
             next = computeBeam(player, level, origin, look);
             if (next.isEmpty()) {
-                next = closeWallFallback(level, eye, look, HANDHELD_CLOSE_WALL_LEVEL);
+                next = closeWallFallback(player, level, eye, look, HANDHELD_CLOSE_WALL_LEVEL);
             }
         }
 
@@ -190,44 +190,40 @@ public final class FlashlightEvents {
         return fluid.is(FluidTags.WATER) && origin.y < pos.getY() + fluid.getHeight(level, pos);
     }
 
-    private static Map<BlockPos, Integer> closeWallFallback(ServerLevel level, Vec3 eye, Vec3 look, int lightLevel) {
+    private static Map<BlockPos, Integer> closeWallFallback(ServerPlayer player, ServerLevel level,
+                                                               Vec3 eye, Vec3 look, int lightLevel) {
         Map<BlockPos, Integer> result = new HashMap<>();
         Vec3 axis = look.lengthSqr() < 1.0E-12 ? new Vec3(0.0, 0.0, 1.0) : look.normalize();
 
-        // Keep the source in the last replaceable cell immediately before the wall.
-        // Using only the eye cell made a close wall look as if the flashlight had
-        // switched off: the source could sit behind the camera/inside the player and
-        // contribute very little light to the surface in front.
-        BlockPos best = null;
-        for (double distance = 0.0; distance <= 1.25; distance += 0.125) {
-            BlockPos pos = BlockPos.containing(eye.add(axis.scale(distance)));
-            if (!loaded(level, pos)) break;
-            if (!acceptsLight(level.getBlockState(pos))) break;
-            best = pos;
-        }
+        BlockPos best = fallbackCellAlong(player, level, eye, axis);
+        if (best == null) best = fallbackCellAlong(player, level, eye, axis.scale(-1.0));
 
-        if (best == null) {
-            // A thin collision shape (pane, fence, bars, etc.) can share the eye's
-            // block cell without actually containing the eye point. In that case the
-            // whole BlockState is not replaceable, so the forward scan has nowhere to
-            // place a temporary light even though the player is standing in free space.
-            // Walk back toward the camera side and use the first replaceable cell there.
-            BlockPos eyePos = BlockPos.containing(eye);
-            for (double distance = 0.125; distance <= 1.25; distance += 0.125) {
-                BlockPos pos = BlockPos.containing(eye.subtract(axis.scale(distance)));
-                if (!loaded(level, pos)) break;
-                if (pos.equals(eyePos)) continue;
-                if (!acceptsLight(level.getBlockState(pos))) break;
-                best = pos;
-                break;
-            }
-        }
-        if (best == null) {
-            BlockPos eyePos = BlockPos.containing(eye);
-            if (loaded(level, eyePos) && acceptsLight(level.getBlockState(eyePos))) best = eyePos;
-        }
         if (best != null) result.put(best.immutable(), Math.clamp(lightLevel, 1, 15));
         return result;
+    }
+
+    private static BlockPos fallbackCellAlong(ServerPlayer player, ServerLevel level, Vec3 eye, Vec3 direction) {
+        Vec3 end = eye.add(direction.scale(1.25));
+        var hit = level.clip(new net.minecraft.world.level.ClipContext(
+            eye, end,
+            net.minecraft.world.level.ClipContext.Block.COLLIDER,
+            net.minecraft.world.level.ClipContext.Fluid.NONE,
+            player
+        ));
+        double maxDistance = hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS
+            ? 1.25
+            : Math.max(0.0, eye.distanceTo(hit.getLocation()) - 1.0E-4);
+
+        BlockPos best = null;
+        BlockPos previous = null;
+        for (double distance = 0.0; distance <= maxDistance + 1.0E-9; distance += 0.125) {
+            BlockPos pos = BlockPos.containing(eye.add(direction.scale(distance)));
+            if (pos.equals(previous)) continue;
+            previous = pos;
+            if (!loaded(level, pos)) break;
+            if (acceptsLight(level.getBlockState(pos))) best = pos;
+        }
+        return best;
     }
 
     /** Trace a fixed disk of rays with exact voxel traversal and per-block shape clipping. */
