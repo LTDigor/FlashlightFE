@@ -1,8 +1,12 @@
 package com.ltdigor.bestflashlight;
 
+import com.ltdigor.bestflashlight.mixin.AbstractContainerMenuAccessor;
 import blusunrize.immersiveengineering.common.blocks.metal.ChargingStationBlockEntity;
 import blusunrize.immersiveengineering.common.register.IEBlocks;
+import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -63,8 +67,118 @@ public class IntegrationGameTests {
             helper.assertTrue(LampEnergy.stored(off) == 19, "Unequipped lamp has no idle consumption");
             main = lamp(1); LampData.setEnabled(main, true); player.setItemSlot(EquipmentSlot.MAINHAND, main);
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            helper.assertTrue(LampEnergy.stored(main) == 0 && !LampData.enabled(main),
+                "Final affordable FE tick must leave the lamp off immediately without negative charge");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void ownerSnapshotSuppressesOnlyPureEnergyDiffs(GameTestHelper helper) {
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "owner-sync"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            ItemStack lamp = lamp(20);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+            player.inventoryMenu.sendAllDataToRemote();
+
+            int slotIndex = -1;
+            for (int i = 0; i < player.inventoryMenu.slots.size(); i++) {
+                if (player.inventoryMenu.slots.get(i).getItem() == lamp) {
+                    slotIndex = i;
+                    break;
+                }
+            }
+            helper.assertTrue(slotIndex >= 0, "Main-hand flashlight must appear in the inventory menu");
+
+            var remote = ((AbstractContainerMenuAccessor) player.inventoryMenu).bestflashlight$getRemoteSlots();
+            helper.assertTrue(LampEnergy.stored(remote.get(slotIndex)) == 20 && !LampData.enabled(remote.get(slotIndex)),
+                "Fixture remote snapshot must start disabled with full test charge");
+
+            LampData.setEnabled(lamp, true);
+            lamp.set(LampData.ENERGY.get(), 19);
+            FlashlightOwnerSync.advanceOnlyEnergy(player.inventoryMenu, lamp);
+            helper.assertTrue(LampEnergy.stored(remote.get(slotIndex)) == 20 && !LampData.enabled(remote.get(slotIndex)),
+                "ENERGY optimization must not swallow a simultaneous enabled-state change");
+
+            player.inventoryMenu.sendAllDataToRemote();
+            lamp.set(LampData.ENERGY.get(), 37);
+            boolean advanced = FlashlightOwnerSync.advanceOnlyEnergy(player.inventoryMenu, lamp);
+            helper.assertTrue(advanced,
+                "A pure ENERGY diff must be eligible for the lightweight owner synchronization path");
+            helper.assertTrue(LampEnergy.stored(remote.get(slotIndex)) == 37 && LampData.enabled(remote.get(slotIndex)),
+                "Any pure ENERGY diff, including an external charge jump, must advance the remote menu snapshot");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void replacingCarrierInvalidatesOwnerBeamCacheImmediately(GameTestHelper helper) {
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "carrier-cache"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
+            player.setYRot(0.0F);
+            player.setXRot(0.0F);
+            ItemStack lamp = lamp(20);
+            LampData.setEnabled(lamp, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
-            helper.assertTrue(LampEnergy.stored(main) == 0 && !LampData.enabled(main), "Empty lamp disables without negative charge");
+            helper.assertTrue(beamCache(player.getUUID()) != null,
+                "Emitting player must own a server beam cache");
+
+            BlockPos carrier = null;
+            for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 15)) {
+                if (helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
+                    carrier = helper.absolutePos(pos);
+                    break;
+                }
+            }
+            helper.assertTrue(carrier != null, "Beam must place at least one temporary carrier");
+
+            helper.getLevel().setBlock(carrier, Blocks.STONE.defaultBlockState(), 3);
+
+            helper.assertTrue(beamCache(player.getUUID()) == null,
+                "Replacing an owned carrier must invalidate the owner's cached beam immediately");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void staticBeamCacheStillDrainsAndInvalidatesOnMovement(GameTestHelper helper) {
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "beam-cache"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
+            player.setYRot(0.0F);
+            player.setXRot(0.0F);
+            ItemStack lamp = lamp(20);
+            LampData.setEnabled(lamp, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            Object firstCache = beamCache(player.getUUID());
+            helper.assertTrue(firstCache != null && LampEnergy.stored(lamp) == 19,
+                "First emitting tick must build beam cache and consume FE");
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            Object secondCache = beamCache(player.getUUID());
+            helper.assertTrue(firstCache == secondCache,
+                "Static second tick must reuse cached server beam geometry");
+            helper.assertTrue(LampEnergy.stored(lamp) == 18,
+                "Reusing beam geometry must still consume FE every tick");
+
+            player.setPos(player.getX() + 0.25, player.getY(), player.getZ());
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            Object movedCache = beamCache(player.getUUID());
+            helper.assertTrue(movedCache != null && movedCache != secondCache,
+                "Player movement must invalidate cached beam geometry immediately");
+            helper.assertTrue(LampEnergy.stored(lamp) == 17,
+                "Recomputed beam must still consume exactly one tick of FE");
         } finally { remove(helper, player); }
         helper.succeed();
     }
@@ -89,7 +203,70 @@ public class IntegrationGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = "empty", batch = "config")
+
+    @GameTest(template = "empty")
+    public static void emptyPrioritySourceFallsThroughInSameTick(GameTestHelper helper) {
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fallback-energy"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
+            ItemStack main = lamp(0);
+            ItemStack off = lamp(10);
+            LampData.setEnabled(main, true);
+            LampData.setEnabled(off, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, main);
+            player.setItemSlot(EquipmentSlot.OFFHAND, off);
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+
+            helper.assertTrue(!LampData.enabled(main),
+                "An empty higher-priority source must switch itself off");
+            helper.assertTrue(LampEnergy.stored(off) == 9,
+                "A powered fallback source must emit in the same tick without a blackout gap");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", batch = "config_underwater_fallback")
+    public static void submergedHandheldDoesNotStarveDryHeadband(GameTestHelper helper) {
+        boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fallback-water"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            player.setPos(helper.absoluteVec(new net.minecraft.world.phys.Vec3(8.5, 1.4, 3.5)));
+            player.setYRot(0.0F);
+            player.setXRot(0.0F);
+            helper.setBlock(8, 2, 4, Blocks.WATER);
+
+            ItemStack main = lamp(10);
+            LampData.setEnabled(main, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, main);
+
+            ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get());
+            LampData.mount(band, lamp(10));
+            LampData.setEnabled(band, true);
+            var head = CuriosApi.getCuriosInventory(player).orElseThrow().getCurios().get("head").getStacks();
+            head.setStackInSlot(0, band);
+
+            FlashlightConfig.WORKS_UNDERWATER.set(false);
+            FlashlightConfig.WORKS_UNDERWATER.clearCache();
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+
+            helper.assertTrue(LampEnergy.stored(main) == 10,
+                "A submerged handheld skipped by config must not consume FE");
+            helper.assertTrue(LampEnergy.stored(head.getStackInSlot(0)) == 9,
+                "A dry enabled headband must emit instead of being starved by the submerged handheld");
+        } finally {
+            FlashlightConfig.WORKS_UNDERWATER.set(originalWorksUnderwater);
+            FlashlightConfig.WORKS_UNDERWATER.clearCache();
+            remove(helper, player);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", batch = "config_underwater_zero_cost")
     public static void waterDisabledAndZeroCostBehave(GameTestHelper helper) {
         boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
         int originalEnergyPerTick = FlashlightConfig.ENERGY_PER_TICK.get();
@@ -158,6 +335,17 @@ public class IntegrationGameTests {
             ItemStack lamp = lamp(50); LampData.setEnabled(lamp, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            helper.assertTrue(LampEnergy.stored(lamp) == 49,
+                "A nearby partial collision must clip the beam without switching the flashlight off");
+            boolean cameraSideLight = false;
+            for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 4)) {
+                if (helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
+                    cameraSideLight = true;
+                    break;
+                }
+            }
+            helper.assertTrue(cameraSideLight,
+                "A pane sharing the eye block must retain a temporary light on the camera side");
             for (BlockPos pos : BlockPos.betweenClosed(0, 0, 5, 15, 7, 15)) {
                 helper.assertTrue(!helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
                     "Handheld emitter must not jump through nearby glass pane");
@@ -165,6 +353,85 @@ public class IntegrationGameTests {
         } finally { remove(helper, player); }
         helper.succeed();
     }
+
+    @GameTest(template = "empty", batch = "emitter_occlusion")
+    public static void partialCollisionCellCanUseOpenSide(GameTestHelper helper) {
+        var player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "pane-open-side-test"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            var pane = Blocks.GLASS_PANE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST, true)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WEST, true);
+            for (int x = 0; x < 16; x++) for (int y = 0; y < 8; y++) {
+                helper.setBlock(new BlockPos(x, y, 4), pane);
+            }
+
+            var feet = helper.absoluteVec(new net.minecraft.world.phys.Vec3(8.5, 1, 4.12));
+            player.setPos(feet.x, feet.y, feet.z);
+            player.setYRot(180.0F);
+            player.setXRot(0.0F);
+            ItemStack lamp = lamp(50);
+            LampData.setEnabled(lamp, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+
+            boolean openSideLight = false;
+            int paneZ = 4;
+            for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 15)) {
+                if (helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
+                    helper.assertTrue(pos.getZ() < paneZ,
+                        "Looking away from a pane must never place fallback light through its collision plane");
+                    openSideLight = true;
+                }
+            }
+            helper.assertTrue(openSideLight,
+                "A partial-collision eye cell must still allow fallback light on its open side");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", batch = "emitter_occlusion")
+    public static void partialCollisionFallbackCannotJumpThroughWallBehindPlayer(GameTestHelper helper) {
+        var player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "pane-back-wall-test"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            var pane = Blocks.GLASS_PANE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST, true)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WEST, true);
+            for (int x = 0; x < 16; x++) for (int y = 0; y < 8; y++) {
+                helper.setBlock(new BlockPos(x, y, 4), pane);
+                helper.setBlock(new BlockPos(x, y, 3), Blocks.STONE);
+            }
+            var feet = helper.absoluteVec(new net.minecraft.world.phys.Vec3(8.5, 1, 4.12));
+            player.setPos(feet.x, feet.y, feet.z);
+            player.setYRot(0); player.setXRot(0);
+            ItemStack lamp = lamp(50); LampData.setEnabled(lamp, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+
+            for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 2)) {
+                helper.assertTrue(!helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+                    "Close-wall fallback must never tunnel through a solid block behind the player");
+            }
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object beamCache(UUID player) {
+        try {
+            Field field = FlashlightEvents.class.getDeclaredField("BEAM_CACHE");
+            field.setAccessible(true);
+            return ((Map<UUID, Object>) field.get(null)).get(player);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not inspect server beam cache", exception);
+        }
+    }
+
     private static ItemStack lamp(int energy) {
         ItemStack lamp=new ItemStack(FlashlightMod.FLASHLIGHT.get());
         lamp.getCapability(Capabilities.EnergyStorage.ITEM).receiveEnergy(energy,false);

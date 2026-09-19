@@ -2,12 +2,14 @@ package com.ltdigor.bestflashlight;
 
 import com.mojang.authlib.GameProfile;
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
@@ -17,10 +19,13 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -222,23 +227,226 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void flowingWaterAndWaterPlantsRefuseTemporaryLight(GameTestHelper helper) {
+    public static void temporaryCarrierCannotBeMovedByPistons(GameTestHelper helper) {
+        helper.assertTrue(
+            FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState().getPistonPushReaction()
+                == net.minecraft.world.level.material.PushReaction.BLOCK,
+            "Temporary flashlight carrier must block piston movement like vanilla light blocks"
+        );
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void nonWaterFluidReplacesDryCarrierAndClearsOwnership(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(3, 2, 4));
+        UUID owner = UUID.randomUUID();
+
+        level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+        acquire(level, pos, owner, 15);
+        helper.assertTrue(level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Fixture must begin with a dry temporary carrier");
+        helper.assertTrue(FlashlightEvents.isTrackedLight(level.dimension(), pos),
+            "Fixture carrier must have light ownership");
+
+        var container = (net.minecraft.world.level.block.LiquidBlockContainer) FlashlightMod.FLASHLIGHT_LIGHT.get();
+        var lava = net.minecraft.world.level.material.Fluids.LAVA.getSource(false);
+        helper.assertTrue(container.canPlaceLiquid(null, level, pos, level.getBlockState(pos), lava.getType()),
+            "Dry carrier must not block lava or other non-water fluids");
+        helper.assertTrue(container.placeLiquid(level, pos, level.getBlockState(pos), lava),
+            "Non-water fluid placement must be accepted");
+
+        helper.assertTrue(level.getBlockState(pos).is(Blocks.LAVA),
+            "Non-water fluid must replace the temporary carrier with its real block");
+        helper.assertTrue(!FlashlightEvents.isTrackedLight(level.dimension(), pos),
+            "Replacing a carrier with non-water fluid must clear stale ownership");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void temporaryWaterCarrierPreservesVanillaBucketPickup(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos sourcePos = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos flowingPos = helper.absolutePos(new BlockPos(6, 2, 4));
+        UUID sourceOwner = UUID.randomUUID();
+        UUID flowingOwner = UUID.randomUUID();
+
+        helper.assertTrue(
+            FlashlightMod.FLASHLIGHT_LIGHT.get() instanceof net.minecraft.world.level.block.BucketPickup,
+            "Temporary flashlight carrier must preserve source-water bucket pickup"
+        );
+        helper.assertTrue(
+            FlashlightMod.FLASHLIGHT_LIGHT.get() instanceof net.minecraft.world.level.block.LiquidBlockContainer,
+            "Temporary flashlight carrier must accept water through LiquidBlockContainer without being replaced"
+        );
+
+        BlockPos dryPos = helper.absolutePos(new BlockPos(2, 2, 4));
+        level.setBlock(dryPos, FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState(), 3);
+        var container = (net.minecraft.world.level.block.LiquidBlockContainer) FlashlightMod.FLASHLIGHT_LIGHT.get();
+        var incomingFlow = Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 5).getFluidState();
+        helper.assertTrue(container.canPlaceLiquid(null, level, dryPos, level.getBlockState(dryPos), incomingFlow.getType()),
+            "Dry temporary carrier must advertise that it can accept water");
+        helper.assertTrue(container.placeLiquid(level, dryPos, level.getBlockState(dryPos), incomingFlow),
+            "Dry temporary carrier must accept incoming flowing water without being replaced");
+        BlockState filledCarrier = level.getBlockState(dryPos);
+        helper.assertTrue(filledCarrier.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
+                && filledCarrier.getValue(FlashlightLightBlock.WATERLOGGED)
+                && filledCarrier.getValue(FlashlightLightBlock.WATER_LEVEL) == 5,
+            "LiquidBlockContainer path must keep the carrier and preserve the exact incoming water level");
+        FlashlightLightBlock.restore(level, dryPos);
+
+        level.setBlock(sourcePos, Blocks.WATER.defaultBlockState(), 3);
+        acquire(level, sourcePos, sourceOwner, 15);
+        var pickup = (net.minecraft.world.level.block.BucketPickup) FlashlightMod.FLASHLIGHT_LIGHT.get();
+        ItemStack bucket = pickup.pickupBlock(null, level, sourcePos, level.getBlockState(sourcePos));
+
+        helper.assertTrue(bucket.is(net.minecraft.world.item.Items.WATER_BUCKET),
+            "Source water represented by the carrier must still fill a bucket");
+        BlockState dryCarrier = level.getBlockState(sourcePos);
+        helper.assertTrue(dryCarrier.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
+                && !dryCarrier.getValue(FlashlightLightBlock.WATERLOGGED),
+            "Picking up represented source water must leave a dry temporary light carrier");
+        release(level, sourcePos, sourceOwner);
+        helper.assertTrue(level.getBlockState(sourcePos).isAir(),
+            "Dry carrier must restore to air after its final light owner releases it");
+
+        level.setBlock(flowingPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 4), 3);
+        acquire(level, flowingPos, flowingOwner, 15);
+        ItemStack flowingBucket = pickup.pickupBlock(null, level, flowingPos, level.getBlockState(flowingPos));
+        helper.assertTrue(flowingBucket.isEmpty(),
+            "Flowing water represented by the carrier must remain non-bucketable");
+        BlockState flowingCarrier = level.getBlockState(flowingPos);
+        helper.assertTrue(flowingCarrier.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
+                && flowingCarrier.getValue(FlashlightLightBlock.WATERLOGGED)
+                && flowingCarrier.getValue(FlashlightLightBlock.WATER_LEVEL) == 4,
+            "Failed flowing-water pickup must leave the exact carrier water state untouched");
+        release(level, flowingPos, flowingOwner);
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void flowingWaterSurvivesTemporaryLightAndPlantsStayUntouched(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos flowingPos = helper.absolutePos(new BlockPos(4, 2, 4));
         BlockPos plantPos = helper.absolutePos(new BlockPos(6, 2, 4));
+        UUID owner = UUID.randomUUID();
         level.setBlock(flowingPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 1), 3);
         level.setBlock(plantPos.below(), Blocks.DIRT.defaultBlockState(), 3);
         level.setBlock(plantPos, Blocks.WATER.defaultBlockState(), 3);
         level.setBlock(plantPos, Blocks.SEAGRASS.defaultBlockState(), 3);
 
-        acquire(level, flowingPos, UUID.randomUUID(), 15);
+        acquire(level, flowingPos, owner, 15);
         acquire(level, plantPos, UUID.randomUUID(), 15);
 
-        BlockState flowing = level.getBlockState(flowingPos);
-        helper.assertTrue(flowing.is(Blocks.WATER) && !flowing.getFluidState().isSource(), "Flowing water must not be replaced by temporary light");
-        helper.assertTrue(level.getBlockState(plantPos).is(Blocks.SEAGRASS), "Water plants must not be replaced by temporary light");
-        helper.assertTrue(!FlashlightEvents.isTrackedLight(level.dimension(), flowingPos), "Refused flowing water must not retain ownership");
-        helper.assertTrue(!FlashlightEvents.isTrackedLight(level.dimension(), plantPos), "Refused water plants must not retain ownership");
+        BlockState light = level.getBlockState(flowingPos);
+        helper.assertTrue(light.is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Flowing water must accept a temporary light carrier");
+        helper.assertTrue(light.getValue(FlashlightLightBlock.WATERLOGGED)
+                && light.getValue(FlashlightLightBlock.WATER_LEVEL) == 1,
+            "Temporary carrier must remember the exact flowing-water level");
+        helper.assertTrue(level.getBlockState(plantPos).is(Blocks.SEAGRASS),
+            "Water plants must not be replaced by temporary light");
+        helper.assertTrue(!FlashlightEvents.isTrackedLight(level.dimension(), plantPos),
+            "Refused water plants must not retain ownership");
+
+        release(level, flowingPos, owner);
+        BlockState restored = level.getBlockState(flowingPos);
+        helper.assertTrue(restored.is(Blocks.WATER) && restored.getValue(LiquidBlock.LEVEL) == 1,
+            "Final owner release must restore the original flowing-water level");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void flowingWaterTickPreservesCarrierAndContinuesSimulation(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos source = pos.west();
+        UUID owner = UUID.randomUUID();
+
+        level.setBlock(source, Blocks.WATER.defaultBlockState(), 3);
+        level.setBlock(pos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 4), 3);
+        var fluidType = level.getFluidState(pos).getType();
+        level.scheduleTick(pos, fluidType, 1);
+
+        acquire(level, pos, owner, 15);
+
+        helper.assertTrue(level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Flowing-water cell must use the temporary carrier");
+        helper.assertTrue(level.getFluidTicks().hasScheduledTick(pos, fluidType),
+            "Carrier must keep vanilla water simulation scheduled");
+
+        helper.runAfterDelay(3, () -> {
+            BlockState carrier = level.getBlockState(pos);
+            helper.assertTrue(carrier.is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+                "Vanilla FlowingFluid tick must update water state without replacing the active carrier");
+            helper.assertTrue(carrier.getValue(FlashlightLightBlock.WATERLOGGED),
+                "Water fed by a neighboring source must remain represented inside the carrier");
+
+            int simulatedLevel = carrier.getValue(FlashlightLightBlock.WATER_LEVEL);
+            release(level, pos, owner);
+
+            BlockState restored = level.getBlockState(pos);
+            helper.assertTrue(restored.is(Blocks.WATER)
+                    && restored.getValue(LiquidBlock.LEVEL) == simulatedLevel,
+                "Releasing the final owner must restore the water level produced by vanilla simulation");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = "empty")
+    public static void dryCarrierReleaseRearmsNeighboringWater(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos waterPos = pos.west();
+        UUID owner = UUID.randomUUID();
+
+        level.setBlock(waterPos, Blocks.WATER.defaultBlockState(), 3);
+        level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+        acquire(level, pos, owner, 15);
+        helper.assertTrue(level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Dry illuminated cell must use the temporary carrier");
+
+        var waterType = level.getFluidState(waterPos).getType();
+        level.getFluidTicks().clearArea(new BoundingBox(
+            waterPos.getX(), waterPos.getY(), waterPos.getZ(),
+            waterPos.getX(), waterPos.getY(), waterPos.getZ()
+        ));
+        helper.assertTrue(!level.getFluidTicks().hasScheduledTick(waterPos, waterType),
+            "Fixture must begin with stable neighboring water");
+
+        release(level, pos, owner);
+
+        helper.assertTrue(level.getBlockState(pos).isAir(),
+            "Releasing a dry carrier must restore air");
+        helper.assertTrue(level.getFluidTicks().hasScheduledTick(waterPos, waterType),
+            "Restoring air beside stable water must re-arm neighboring fluid simulation");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void diagonalCornerCollisionBlocksOrientationIndependentRay(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer player = geometryPlayer(level, helper.absoluteVec(new Vec3(4.5, 2.5, 4.5)));
+        try {
+            BlockPos startCell = BlockPos.containing(player.position());
+            Vec3 origin = player.position();
+            Vec3 end = origin.add(4.0, 4.0, 0.0);
+            Vec3 axis = end.subtract(origin).normalize();
+
+            // At the first X/Y corner crossing the old X-first traversal checked
+            // (x+1,y), then the diagonal, but skipped this (x,y+1) side cell.
+            level.setBlock(startCell.above(), Blocks.STONE.defaultBlockState(), 3);
+
+            Map<BlockPos, BlockState> states = new HashMap<>();
+            Map<BlockPos, Integer> result = new HashMap<>();
+            invokeTraceRay(level, origin, end, axis, origin.distanceTo(end),
+                CollisionContext.of(player), states, result);
+
+            helper.assertTrue(!result.containsKey(startCell.offset(1, 1, 0)),
+                "A solid touching an exact voxel corner from either side must block diagonal continuation");
+        } finally {
+            player.discard();
+        }
         helper.succeed();
     }
 
@@ -264,6 +472,45 @@ public class BeamGameTests {
         helper.assertTrue(restored.is(Blocks.WATER), "Releasing the final owner must restore source water");
         helper.assertTrue(restored.getFluidState().isSource(), "Restored water must remain a source block");
         helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void orphanCleanupRestoresFlowingWaterLevel(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockState light = FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState()
+            .setValue(FlashlightLightBlock.WATERLOGGED, true)
+            .setValue(FlashlightLightBlock.WATER_LEVEL, 5);
+        level.setBlock(pos, light, 3);
+
+        ((FlashlightLightBlock) FlashlightMod.FLASHLIGHT_LIGHT.get()).tick(level.getBlockState(pos), level, pos, level.random);
+
+        BlockState restored = level.getBlockState(pos);
+        helper.assertTrue(restored.is(Blocks.WATER) && restored.getValue(LiquidBlock.LEVEL) == 5,
+            "Orphan cleanup must restore the exact flowing-water level");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void chunkLoadReplacesPersistedDelayedOrphanCleanupTick(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
+        level.setBlock(pos, FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState(), 3);
+
+        helper.assertTrue(level.getBlockTicks().hasScheduledTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Carrier placement must start with its normal delayed cleanup tick");
+
+        invokeLifecycle("onChunkLoad", new ChunkEvent.Load(level.getChunkAt(pos), false));
+        invokeLifecycle("onServerTick", new ServerTickEvent.Pre(() -> true, level.getServer()));
+
+        helper.assertTrue(level.getBlockTicks().hasScheduledTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Chunk load must retain a cleanup tick after replacing the delayed watchdog");
+
+        helper.runAfterDelay(3, () -> {
+            helper.assertTrue(level.getBlockState(pos).isAir(),
+                "Persisted orphan carrier must be restored promptly instead of waiting 100 ticks");
+            helper.succeed();
+        });
     }
 
     @GameTest(template = "empty")
@@ -308,6 +555,18 @@ public class BeamGameTests {
             return (Map<BlockPos, Integer>) method.invoke(null, player, level, origin, look);
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError("Could not invoke FlashlightEvents.computeBeam", exception);
+        }
+    }
+
+    private static void invokeTraceRay(ServerLevel level, Vec3 origin, Vec3 end, Vec3 axis, double range,
+                                       CollisionContext context, Map<BlockPos, BlockState> states,
+                                       Map<BlockPos, Integer> result) {
+        try {
+            Method method = findLifecycleMethod("traceRay", 8);
+            method.setAccessible(true);
+            method.invoke(null, level, origin, end, axis, range, context, states, result);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not invoke FlashlightEvents.traceRay", exception);
         }
     }
 

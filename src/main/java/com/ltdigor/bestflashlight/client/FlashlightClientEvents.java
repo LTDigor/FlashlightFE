@@ -56,6 +56,7 @@ public final class FlashlightClientEvents {
         NeoForge.EVENT_BUS.addListener(FlashlightClientEvents::mouse);
         NeoForge.EVENT_BUS.addListener(FlashlightClientEvents::interaction);
         NeoForge.EVENT_BUS.addListener(FlashlightClientEvents::tooltip);
+        OptionalDynamicLights.register();
     }
 
     private static boolean inGame() {
@@ -111,6 +112,7 @@ public final class FlashlightClientEvents {
         // Actions come only from physical press events, never from repeatable click queues.
         while (HANDHELD.consumeClick()) {}
         while (HEADBAND.consumeClick()) {}
+        OptionalDynamicLights.clientTick();
     }
 
     private static void tooltip(ItemTooltipEvent event) {

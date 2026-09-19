@@ -5,33 +5,45 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /** Server-owned temporary illumination. All state is confined to the server thread. */
 public final class FlashlightEvents {
     private static final Map<ResourceKey<Level>, Map<BlockPos, Map<UUID, Integer>>> LIGHT_OWNERS = new HashMap<>();
     private static final Map<UUID, PlayerBeam> PLAYER_BEAMS = new HashMap<>();
+    private static final Map<UUID, BeamCache> BEAM_CACHE = new HashMap<>();
+    private static final ConcurrentLinkedQueue<CleanupRearm> PENDING_CLEANUP_REARM =
+        new ConcurrentLinkedQueue<>();
 
-    // Integer points inside a radius-four disk give 49 directions, including the axis
-    // and all four cone edges. Cost remains bounded even at maximum range and angle.
-    private static final int DIRECTION_RADIUS = 4;
+    // Integer points inside a radius-three disk give 29 directions, including the
+    // axis and cone edges. This keeps fallback quality while cutting server ray work
+    // by about 41% compared with the previous 49-ray disk.
+    private static final int DIRECTION_RADIUS = 3;
     private static final int MAX_RAY_CELLS = 128;
+    private static final int STATIC_BEAM_REFRESH_TICKS = 4;
+    private static final double CACHE_POSITION_EPSILON_SQR = 0.01 * 0.01;
+    private static final double CACHE_DIRECTION_DOT = Math.cos(Math.toRadians(0.20));
 
     // Vanilla block light itself is isotropic. For a headlamp, only the terminal cells
     // of the forward rays become emitters. Their brightness grows with distance so the
@@ -39,15 +51,18 @@ public final class FlashlightEvents {
     private static final double HEAD_MOUNTED_MIN_FORWARD = 0.75;
     private static final int HEAD_MOUNTED_BACKSPILL_LEVEL = 3;
     private static final int HEAD_MOUNTED_CLOSE_WALL_LEVEL = 4;
-    private static final int HANDHELD_CLOSE_WALL_LEVEL = 8;
+    private static final int HANDHELD_CLOSE_WALL_LEVEL = 15;
 
     private FlashlightEvents() {}
 
     public static void register() {
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerTick);
+        NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerLoggedOut);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerChangedDimension);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onLivingDeath);
+        NeoForge.EVENT_BUS.addListener(FlashlightEvents::onChunkLoad);
+        NeoForge.EVENT_BUS.addListener(FlashlightEvents::onServerTick);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onLevelUnload);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onServerStopped);
     }
@@ -55,52 +70,90 @@ public final class FlashlightEvents {
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         LampSource.returnInvalidFlashlights(player);
-        LampSource source = player.isAlive() && !player.isSpectator() ? LampSource.select(player) : null;
-        if (source == null) {
+        if (!player.isAlive() || player.isSpectator()) {
             clearPlayer(player);
             return;
         }
 
-        if (!LampEnergy.hasPower(source.stack(), player)) {
-            LampData.setEnabled(source.stack(), false);
+        ServerLevel level = player.serverLevel();
+        Vec3 look = player.getLookAngle().normalize();
+        LampSource source = LampSource.select(player, candidate -> {
+            if (!LampEnergy.hasPower(candidate.stack(), player)) {
+                LampData.setEnabled(candidate.stack(), false);
+                return false;
+            }
+            Vec3 candidateEmitter = emitterOrigin(player, candidate, look);
+            return FlashlightConfig.WORKS_UNDERWATER.get() || !isSubmerged(level, candidateEmitter);
+        });
+        if (source == null) {
             clearPlayer(player);
             return;
         }
-        ServerLevel level = player.serverLevel();
-        Vec3 look = player.getLookAngle().normalize();
         Vec3 emitter = emitterOrigin(player, source, look);
-        if (!FlashlightConfig.WORKS_UNDERWATER.get() && isSubmerged(level, emitter)) {
+        UUID owner = player.getUUID();
+
+        // In an all-LDL session every client renders every tracked player's cone.
+        // Keep FE and source validation authoritative on the server, but skip the
+        // temporary block-light beam entirely.
+        if (!DynamicLightCoordination.useServerFallback(player)) {
             clearPlayer(player);
+            BEAM_CACHE.remove(owner);
+            if (LampEnergy.consume(source.stack(), player)) {
+                FlashlightOwnerSync.syncDrain(player, source);
+            }
+            return;
+        }
+
+        Vec3 eye = player.getEyePosition();
+        double configuredRange = Math.clamp(FlashlightConfig.BEAM_RANGE.get(), 1.0, 32.0);
+        double configuredAngle = Math.clamp(FlashlightConfig.CONE_ANGLE_DEGREES.get(), 1.0, 90.0);
+        long gameTick = level.getGameTime();
+        BeamCache cached = BEAM_CACHE.get(owner);
+        PlayerBeam previous = PLAYER_BEAMS.get(owner);
+        boolean reuse = cached != null
+            && previous != null
+            && cached.dimension().equals(level.dimension())
+            && cached.headMounted() == source.headMounted()
+            && cached.offHand() == source.offHand()
+            && cached.eye().distanceToSqr(eye) <= CACHE_POSITION_EPSILON_SQR
+            && cached.emitter().distanceToSqr(emitter) <= CACHE_POSITION_EPSILON_SQR
+            && cached.look().dot(look) >= CACHE_DIRECTION_DOT
+            && Double.compare(cached.range(), configuredRange) == 0
+            && Double.compare(cached.fullAngleDegrees(), configuredAngle) == 0
+            && gameTick - cached.computedAtTick() < STATIC_BEAM_REFRESH_TICKS;
+
+        if (reuse) {
+            if (!LampEnergy.consume(source.stack(), player)) {
+                clearPlayer(player);
+            } else {
+                FlashlightOwnerSync.syncDrain(player, source);
+            }
             return;
         }
 
         // A hand/head model may geometrically overlap a nearby wall. That must not turn
         // the lamp off: start tracing from the eyes and let each beam ray stop at the wall.
-        Vec3 eye = player.getEyePosition();
         Vec3 origin = emitterPathClear(player, level, emitter) ? emitter : eye;
         Map<BlockPos, Integer> next;
         if (source.headMounted()) {
             next = computeHeadMountedBeam(player, level, origin, look);
             if (next.isEmpty()) {
-                // If the wall is inside the headlamp's near field there is no terminal
-                // cell far enough in front. Keep one dim local source instead of making
-                // the lamp blink off or recreating a bright 360-degree halo.
-                next = closeWallFallback(level, eye, HEAD_MOUNTED_CLOSE_WALL_LEVEL);
+                next = closeWallFallback(player, level, eye, look, HEAD_MOUNTED_CLOSE_WALL_LEVEL);
             }
         } else {
             next = computeBeam(player, level, origin, look);
             if (next.isEmpty()) {
-                next = closeWallFallback(level, eye, HANDHELD_CLOSE_WALL_LEVEL);
+                next = closeWallFallback(player, level, eye, look, HANDHELD_CLOSE_WALL_LEVEL);
             }
         }
 
         if (next.isEmpty() || !LampEnergy.consume(source.stack(), player)) {
+            BEAM_CACHE.remove(owner);
             clearPlayer(player);
             return;
         }
+        FlashlightOwnerSync.syncDrain(player, source);
 
-        UUID owner = player.getUUID();
-        PlayerBeam previous = PLAYER_BEAMS.get(owner);
         if (previous != null && !previous.dimension().equals(level.dimension())) {
             clearPlayer(player);
             previous = null;
@@ -114,6 +167,10 @@ public final class FlashlightEvents {
             acquireLight(level, level.dimension(), entry.getKey(), owner, entry.getValue());
         }
         PLAYER_BEAMS.put(owner, new PlayerBeam(level.dimension(), new HashSet<>(next.keySet())));
+        BEAM_CACHE.put(owner, new BeamCache(
+            level.dimension(), eye, emitter, look, source.headMounted(), source.offHand(),
+            configuredRange, configuredAngle, gameTick
+        ));
     }
 
     private static Vec3 emitterOrigin(ServerPlayer player, LampSource source, Vec3 look) {
@@ -145,13 +202,40 @@ public final class FlashlightEvents {
         return fluid.is(FluidTags.WATER) && origin.y < pos.getY() + fluid.getHeight(level, pos);
     }
 
-    private static Map<BlockPos, Integer> closeWallFallback(ServerLevel level, Vec3 eye, int lightLevel) {
+    private static Map<BlockPos, Integer> closeWallFallback(ServerPlayer player, ServerLevel level,
+                                                               Vec3 eye, Vec3 look, int lightLevel) {
         Map<BlockPos, Integer> result = new HashMap<>();
-        BlockPos pos = BlockPos.containing(eye);
-        if (loaded(level, pos) && acceptsLight(level.getBlockState(pos))) {
-            result.put(pos, Math.clamp(lightLevel, 1, 15));
-        }
+        Vec3 axis = look.lengthSqr() < 1.0E-12 ? new Vec3(0.0, 0.0, 1.0) : look.normalize();
+
+        BlockPos best = fallbackCellAlong(player, level, eye, axis);
+        if (best == null) best = fallbackCellAlong(player, level, eye, axis.scale(-1.0));
+
+        if (best != null) result.put(best.immutable(), Math.clamp(lightLevel, 1, 15));
         return result;
+    }
+
+    private static BlockPos fallbackCellAlong(ServerPlayer player, ServerLevel level, Vec3 eye, Vec3 direction) {
+        Vec3 end = eye.add(direction.scale(1.25));
+        var hit = level.clip(new net.minecraft.world.level.ClipContext(
+            eye, end,
+            net.minecraft.world.level.ClipContext.Block.COLLIDER,
+            net.minecraft.world.level.ClipContext.Fluid.NONE,
+            player
+        ));
+        double maxDistance = hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS
+            ? 1.25
+            : Math.max(0.0, eye.distanceTo(hit.getLocation()) - 1.0E-4);
+
+        BlockPos best = null;
+        BlockPos previous = null;
+        for (double distance = 0.0; distance <= maxDistance + 1.0E-9; distance += 0.125) {
+            BlockPos pos = BlockPos.containing(eye.add(direction.scale(distance)));
+            if (pos.equals(previous)) continue;
+            previous = pos;
+            if (!loaded(level, pos)) break;
+            if (acceptsLight(level.getBlockState(pos))) best = pos;
+        }
+        return best;
     }
 
     /** Trace a fixed disk of rays with exact voxel traversal and per-block shape clipping. */
@@ -235,18 +319,12 @@ public final class FlashlightEvents {
 
             double next = Math.min(crossX, Math.min(crossY, crossZ));
             if (next > 1.0) return;
-            // Advance one boundary at a time. Ties visit the adjacent boundary cell
-            // too, preventing diagonal rays from slipping through touching solids.
-            if (crossX <= crossY && crossX <= crossZ) {
-                x += stepX;
-                crossX += strideX;
-            } else if (crossY <= crossZ) {
-                y += stepY;
-                crossY += strideY;
-            } else {
-                z += stepZ;
-                crossZ += strideZ;
-            }
+            int tiedAxes = tiedAxes(crossX, crossY, crossZ, next);
+            if (boundaryCollision(level, origin, end, context, states,
+                                  x, y, z, stepX, stepY, stepZ, tiedAxes)) return;
+            if ((tiedAxes & 1) != 0) { x += stepX; crossX += strideX; }
+            if ((tiedAxes & 2) != 0) { y += stepY; crossY += strideY; }
+            if ((tiedAxes & 4) != 0) { z += stepZ; crossZ += strideZ; }
         }
     }
 
@@ -279,16 +357,12 @@ public final class FlashlightEvents {
 
             double next = Math.min(crossX, Math.min(crossY, crossZ));
             if (next > 1.0) break;
-            if (crossX <= crossY && crossX <= crossZ) {
-                x += stepX;
-                crossX += strideX;
-            } else if (crossY <= crossZ) {
-                y += stepY;
-                crossY += strideY;
-            } else {
-                z += stepZ;
-                crossZ += strideZ;
-            }
+            int tiedAxes = tiedAxes(crossX, crossY, crossZ, next);
+            if (boundaryCollision(level, origin, end, context, states,
+                                  x, y, z, stepX, stepY, stepZ, tiedAxes)) break;
+            if ((tiedAxes & 1) != 0) { x += stepX; crossX += strideX; }
+            if ((tiedAxes & 2) != 0) { y += stepY; crossY += strideY; }
+            if ((tiedAxes & 4) != 0) { z += stepZ; crossZ += strideZ; }
         }
 
         if (terminal != null) {
@@ -303,6 +377,39 @@ public final class FlashlightEvents {
         }
     }
 
+    private static int tiedAxes(double crossX, double crossY, double crossZ, double next) {
+        final double epsilon = 1.0E-12;
+        int axes = 0;
+        if (Math.abs(crossX - next) <= epsilon) axes |= 1;
+        if (Math.abs(crossY - next) <= epsilon) axes |= 2;
+        if (Math.abs(crossZ - next) <= epsilon) axes |= 4;
+        return axes;
+    }
+
+    /**
+     * At an exact edge/corner crossing a ray touches multiple neighboring voxels at
+     * the same parameter value. Check every proper non-empty subset of the tied axes
+     * before advancing to the diagonal cell so traversal is orientation-independent.
+     */
+    private static boolean boundaryCollision(ServerLevel level, Vec3 origin, Vec3 end,
+                                             CollisionContext context, Map<BlockPos, BlockState> states,
+                                             int x, int y, int z, int stepX, int stepY, int stepZ,
+                                             int tiedAxes) {
+        if (Integer.bitCount(tiedAxes) <= 1) return false;
+        for (int subset = tiedAxes; subset > 0; subset = (subset - 1) & tiedAxes) {
+            if (subset == tiedAxes) continue; // The fully advanced cell is visited next.
+            BlockPos pos = new BlockPos(
+                x + ((subset & 1) != 0 ? stepX : 0),
+                y + ((subset & 2) != 0 ? stepY : 0),
+                z + ((subset & 4) != 0 ? stepZ : 0)
+            );
+            if (!loaded(level, pos)) return true;
+            BlockState state = states.computeIfAbsent(pos, level::getBlockState);
+            if (state.getCollisionShape(level, pos, context).clip(origin, end, pos) != null) return true;
+        }
+        return false;
+    }
+
     private static double firstCrossing(double start, int cell, double delta, int step) {
         if (step == 0) return Double.POSITIVE_INFINITY;
         return (cell + (step > 0 ? 1.0 : 0.0) - start) / delta;
@@ -313,8 +420,7 @@ public final class FlashlightEvents {
     }
 
     private static boolean acceptsLight(BlockState state) {
-        return state.isAir() || state.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
-            || (state.is(Blocks.WATER) && state.getFluidState().isSource());
+        return state.isAir() || state.is(FlashlightMod.FLASHLIGHT_LIGHT.get()) || state.is(Blocks.WATER);
     }
 
     private static void acquireLight(ServerLevel level, ResourceKey<Level> dimension, BlockPos pos, UUID owner, int lightLevel) {
@@ -327,11 +433,19 @@ public final class FlashlightEvents {
         Map<BlockPos, Map<UUID, Integer>> dimensionLights = LIGHT_OWNERS.computeIfAbsent(dimension, ignored -> new HashMap<>());
         Map<UUID, Integer> owners = dimensionLights.computeIfAbsent(pos.immutable(), ignored -> new HashMap<>());
         owners.put(owner, Math.clamp(lightLevel, 1, 15));
-        int strongest = owners.values().stream().mapToInt(Integer::intValue).max().orElseThrow();
-        boolean waterlogged = current.is(Blocks.WATER)
+        int strongest = strongest(owners);
+        boolean replacingWater = current.is(Blocks.WATER);
+        boolean waterlogged = replacingWater
             || (current.is(FlashlightMod.FLASHLIGHT_LIGHT.get()) && current.getValue(FlashlightLightBlock.WATERLOGGED));
+        int waterLevel = replacingWater
+            ? current.getValue(LiquidBlock.LEVEL)
+            : current.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
+                ? current.getValue(FlashlightLightBlock.WATER_LEVEL)
+                : 0;
         BlockState desired = FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState()
-            .setValue(FlashlightLightBlock.LEVEL, strongest).setValue(FlashlightLightBlock.WATERLOGGED, waterlogged);
+            .setValue(FlashlightLightBlock.LEVEL, strongest)
+            .setValue(FlashlightLightBlock.WATERLOGGED, waterlogged)
+            .setValue(FlashlightLightBlock.WATER_LEVEL, waterLevel);
         if (current != desired) level.setBlock(pos, desired, FlashlightLightBlock.UPDATE_FLAGS);
     }
 
@@ -352,10 +466,16 @@ public final class FlashlightEvents {
             forgetLight(dimension, pos);
             return;
         }
-        int strongest = owners.values().stream().mapToInt(Integer::intValue).max().orElseThrow();
+        int strongest = strongest(owners);
         if (current.getValue(FlashlightLightBlock.LEVEL) != strongest) {
             level.setBlock(pos, current.setValue(FlashlightLightBlock.LEVEL, strongest), FlashlightLightBlock.UPDATE_FLAGS);
         }
+    }
+
+    private static int strongest(Map<UUID, Integer> owners) {
+        int strongest = 0;
+        for (int value : owners.values()) strongest = Math.max(strongest, value);
+        return strongest;
     }
 
     public static boolean isTrackedLight(ResourceKey<Level> dimension, BlockPos pos) {
@@ -366,41 +486,89 @@ public final class FlashlightEvents {
     static void forgetLight(ResourceKey<Level> dimension, BlockPos pos) {
         Map<BlockPos, Map<UUID, Integer>> lights = LIGHT_OWNERS.get(dimension);
         if (lights != null) {
-            lights.remove(pos);
+            Map<UUID, Integer> removedOwners = lights.remove(pos);
+            if (removedOwners != null) {
+                for (UUID owner : removedOwners.keySet()) BEAM_CACHE.remove(owner);
+            }
             if (lights.isEmpty()) LIGHT_OWNERS.remove(dimension);
         }
     }
 
     private static void clearPlayer(ServerPlayer player) {
-        PlayerBeam previous = PLAYER_BEAMS.remove(player.getUUID());
+        UUID owner = player.getUUID();
+        BEAM_CACHE.remove(owner);
+        PlayerBeam previous = PLAYER_BEAMS.remove(owner);
         if (previous == null) return;
         ServerLevel level = player.getServer().getLevel(previous.dimension());
-        for (BlockPos pos : previous.positions()) releaseLight(level, previous.dimension(), pos, player.getUUID());
+        for (BlockPos pos : previous.positions()) releaseLight(level, previous.dimension(), pos, owner);
+    }
+
+    public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) DynamicLightCoordination.joined(player);
     }
 
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) clearPlayer(player);
+        if (event.getEntity() instanceof ServerPlayer player) {
+            clearPlayer(player);
+            DynamicLightCoordination.left(player);
+            LampSource.resetLegacyCheck(player.getUUID());
+        }
     }
 
     public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) clearPlayer(player);
+        if (event.getEntity() instanceof ServerPlayer player) {
+            clearPlayer(player);
+            DynamicLightCoordination.changedDimension(player, event.getFrom(), event.getTo());
+        }
     }
 
     public static void onLivingDeath(LivingDeathEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) clearPlayer(player);
     }
 
+    private static void onChunkLoad(ChunkEvent.Load event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || event.isNewChunk()) return;
+        event.getChunk().findBlocks(
+            state -> state.is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            (pos, state) -> PENDING_CLEANUP_REARM.add(
+                new CleanupRearm(level.dimension(), pos.immutable()))
+        );
+    }
+
+    private static void onServerTick(ServerTickEvent.Pre event) {
+        if (PENDING_CLEANUP_REARM.isEmpty()) return;
+        MinecraftServer server = event.getServer();
+        CleanupRearm pending;
+        while ((pending = PENDING_CLEANUP_REARM.poll()) != null) {
+            ServerLevel level = server.getLevel(pending.dimension());
+            if (level != null && loaded(level, pending.pos())) {
+                FlashlightLightBlock.rearmCleanup(level, pending.pos());
+            }
+        }
+    }
+
     private static void onLevelUnload(LevelEvent.Unload event) {
         if (event.getLevel() instanceof ServerLevel level) {
             LIGHT_OWNERS.remove(level.dimension());
             PLAYER_BEAMS.values().removeIf(beam -> beam.dimension().equals(level.dimension()));
+            BEAM_CACHE.values().removeIf(cache -> cache.dimension().equals(level.dimension()));
+            PENDING_CLEANUP_REARM.removeIf(pending -> pending.dimension().equals(level.dimension()));
+            DynamicLightCoordination.levelUnloaded(level.dimension());
         }
     }
 
     private static void onServerStopped(ServerStoppedEvent event) {
         LIGHT_OWNERS.clear();
         PLAYER_BEAMS.clear();
+        BEAM_CACHE.clear();
+        PENDING_CLEANUP_REARM.clear();
+        DynamicLightCoordination.reset();
+        LampSource.clearLegacyChecks();
     }
 
+    private record CleanupRearm(ResourceKey<Level> dimension, BlockPos pos) {}
     private record PlayerBeam(ResourceKey<Level> dimension, Set<BlockPos> positions) {}
+    private record BeamCache(ResourceKey<Level> dimension, Vec3 eye, Vec3 emitter, Vec3 look,
+                             boolean headMounted, boolean offHand, double range,
+                             double fullAngleDegrees, long computedAtTick) {}
 }

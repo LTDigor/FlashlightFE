@@ -44,6 +44,10 @@ public final class LampEnergy implements IEnergyStorage {
         }
     }
 
+    static void setSyncedStored(ItemStack stack, int amount) {
+        setStored(stack, amount);
+    }
+
     private static boolean creative(LivingEntity actor) {
         return actor instanceof Player player && player.isCreative();
     }
@@ -61,7 +65,11 @@ public final class LampEnergy implements IEnergyStorage {
         if (!hasPower(stack, actor)) { LampData.setEnabled(stack, false); return false; }
         if (!creative(actor)) {
             int cost = FlashlightConfig.ENERGY_PER_TICK.get();
-            if (cost > 0) setStored(stack, stored(stack) - cost);
+            if (cost > 0) {
+                int remaining = stored(stack) - cost;
+                setStored(stack, remaining);
+                if (remaining < cost) LampData.setEnabled(stack, false);
+            }
         }
         return true;
     }

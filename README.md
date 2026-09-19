@@ -6,7 +6,7 @@ A Minecraft **1.21.1 / NeoForge** flashlight mod by **LTDigor**. Rechargeable ha
 
 ## Install
 
-Install `flashlight-fe-1.0.2.jar` on both client and server, with NeoForge **21.1.249+** within 21.1 and Curios **9.5.1+** within version 9. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
+Install `flashlight-fe-1.0.3.jar` on both client and server, with NeoForge **21.1.249+** within 21.1 and Curios **9.5.1+** within version 9. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
 
 This version uses the new `bestflashlight` namespace. It is **not a drop-in update** for the previous personal-use `flashlight` derivative: old items, helmet upgrades and configuration are not migrated. Test in a new world before changing an existing installation.
 
@@ -43,7 +43,7 @@ The handheld has a black mechanical button in a metal rim. Each accepted press a
 
 ## Configuration
 
-NeoForge creates `config/bestflashlight-server.toml`, synchronizes it to clients and applies changes after a world/server restart.
+NeoForge uses `config/bestflashlight-server.toml` as the default server config. If `<world>/serverconfig/bestflashlight-server.toml` exists, that world-specific file overrides the global default. Server values are synchronized to clients and world-restart settings apply after restarting the world/server.
 
 | Setting | Default | Meaning |
 |---|---:|---|
@@ -53,7 +53,9 @@ NeoForge creates `config/bestflashlight-server.toml`, synchronizes it to clients
 | `beamRange` | 12.0 | Beam length, 1–32 blocks |
 | `coneAngleDegrees` | 15.0 | Full cone angle, 1–90 degrees |
 
-At 20 TPS, the default battery lasts about 8 minutes 20 seconds. Vanilla block lighting supplies the illumination, so soft light spreads outside the source-placement cone. The mod preserves source water, avoids flowing water and plants, and cleans up temporary light when the lamp stops emitting. Overlapping beams share light without one player removing another player's contribution. Near walls, tracing falls back to the eye position instead of losing the whole beam. Headbands place sources at forward ray endpoints to reduce illumination around the player; a close wall retains a dim local source. Vanilla block light still spreads in all directions around each source.
+At 20 TPS, the default battery lasts about 8 minutes 20 seconds. Without LambDynamicLights, vanilla block lighting supplies the illumination, so soft light spreads outside the source-placement cone. Temporary carriers preserve exact source/flowing-water levels, preserve normal source-water bucket pickup, avoid water plants, and clean themselves up after normal use and chunk reloads. Overlapping beams share light without one player removing another player's contribution. Near walls, tracing falls back safely instead of losing the whole beam. Headbands place sources at forward ray endpoints to reduce illumination around the player.
+
+If every real player in the current dimension has a compatible, enabled LambDynamicLights bridge, the server uses a two-phase readiness handshake and only then skips its temporary block-light beam for that dimension. Clients render directional cones for all visible players; mixed or older clients automatically keep the server fallback. Static server beam geometry and client occlusion probes are cached between bounded refreshes. FE-only drain uses lightweight owner synchronization instead of resending full held/Curios stacks every tick; enabled state, names, mounting and other component changes still use normal synchronization.
 
 ## Source and assets
 
@@ -79,6 +81,6 @@ Use JDK 21 and import the Gradle project in IntelliJ IDEA.
 python3 scripts/test_multiplayer.py
 ```
 
-Output: `build/libs/flashlight-fe-1.0.2.jar`.
+Output: `build/libs/flashlight-fe-1.0.3.jar`.
 
 GameTests exercise real FE charging, the IE station, crafting, Curios slots, beam geometry, water and shared ownership. Client smoke creates an isolated creative world and checks models, synchronization, both bindings, rebinding, held input, block interactions and button screenshots; reload smoke reopens it to check persistence and orphan cleanup. The multiplayer harness uses a creative player and a survival player on a disposable loopback server, checking FE behavior and press synchronization to the owner and observers. Test sources and IE are excluded from the production JAR; run files and screenshots are ignored by Git.
