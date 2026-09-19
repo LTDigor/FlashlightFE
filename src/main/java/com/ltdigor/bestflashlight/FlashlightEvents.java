@@ -39,7 +39,7 @@ public final class FlashlightEvents {
     private static final double HEAD_MOUNTED_MIN_FORWARD = 0.75;
     private static final int HEAD_MOUNTED_BACKSPILL_LEVEL = 3;
     private static final int HEAD_MOUNTED_CLOSE_WALL_LEVEL = 4;
-    private static final int HANDHELD_CLOSE_WALL_LEVEL = 8;
+    private static final int HANDHELD_CLOSE_WALL_LEVEL = 15;
 
     private FlashlightEvents() {}
 
@@ -85,12 +85,12 @@ public final class FlashlightEvents {
                 // If the wall is inside the headlamp's near field there is no terminal
                 // cell far enough in front. Keep one dim local source instead of making
                 // the lamp blink off or recreating a bright 360-degree halo.
-                next = closeWallFallback(level, eye, HEAD_MOUNTED_CLOSE_WALL_LEVEL);
+                next = closeWallFallback(level, eye, look, HEAD_MOUNTED_CLOSE_WALL_LEVEL);
             }
         } else {
             next = computeBeam(player, level, origin, look);
             if (next.isEmpty()) {
-                next = closeWallFallback(level, eye, HANDHELD_CLOSE_WALL_LEVEL);
+                next = closeWallFallback(level, eye, look, HANDHELD_CLOSE_WALL_LEVEL);
             }
         }
 
@@ -145,12 +145,27 @@ public final class FlashlightEvents {
         return fluid.is(FluidTags.WATER) && origin.y < pos.getY() + fluid.getHeight(level, pos);
     }
 
-    private static Map<BlockPos, Integer> closeWallFallback(ServerLevel level, Vec3 eye, int lightLevel) {
+    private static Map<BlockPos, Integer> closeWallFallback(ServerLevel level, Vec3 eye, Vec3 look, int lightLevel) {
         Map<BlockPos, Integer> result = new HashMap<>();
-        BlockPos pos = BlockPos.containing(eye);
-        if (loaded(level, pos) && acceptsLight(level.getBlockState(pos))) {
-            result.put(pos, Math.clamp(lightLevel, 1, 15));
+        Vec3 axis = look.lengthSqr() < 1.0E-12 ? new Vec3(0.0, 0.0, 1.0) : look.normalize();
+
+        // Keep the source in the last replaceable cell immediately before the wall.
+        // Using only the eye cell made a close wall look as if the flashlight had
+        // switched off: the source could sit behind the camera/inside the player and
+        // contribute very little light to the surface in front.
+        BlockPos best = null;
+        for (double distance = 0.0; distance <= 1.25; distance += 0.125) {
+            BlockPos pos = BlockPos.containing(eye.add(axis.scale(distance)));
+            if (!loaded(level, pos)) break;
+            if (!acceptsLight(level.getBlockState(pos))) break;
+            best = pos;
         }
+
+        if (best == null) {
+            BlockPos eyePos = BlockPos.containing(eye);
+            if (loaded(level, eyePos) && acceptsLight(level.getBlockState(eyePos))) best = eyePos;
+        }
+        if (best != null) result.put(best.immutable(), Math.clamp(lightLevel, 1, 15));
         return result;
     }
 
