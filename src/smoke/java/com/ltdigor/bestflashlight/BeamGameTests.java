@@ -225,6 +225,16 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void temporaryCarrierCannotBeMovedByPistons(GameTestHelper helper) {
+        helper.assertTrue(
+            FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState().getPistonPushReaction()
+                == net.minecraft.world.level.material.PushReaction.BLOCK,
+            "Temporary flashlight carrier must block piston movement like vanilla light blocks"
+        );
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void nonWaterFluidReplacesDryCarrierAndClearsOwnership(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pos = helper.absolutePos(new BlockPos(3, 2, 4));
