@@ -18,7 +18,7 @@ final class FlashlightOwnerSync {
         if (!player.connection.hasChannel(FlashlightNetwork.HandheldEnergy.TYPE)) return;
 
         ItemStack current = source.stack();
-        if (!advanceOnlyEnergy(player.containerMenu, current)) return;
+        advanceOnlyEnergy(player.containerMenu, current);
 
         int inventorySlot = source.offHand() ? Inventory.SLOT_OFFHAND : player.getInventory().selected;
         PacketDistributor.sendToPlayer(
