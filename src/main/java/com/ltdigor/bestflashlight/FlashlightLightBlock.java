@@ -176,7 +176,10 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
 
     static void rearmCleanup(ServerLevel level, BlockPos pos) {
         if (level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
-            level.scheduleTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get(), CLEANUP_DELAY);
+            // A loaded carrier with no in-memory owner is necessarily orphaned after
+            // restart. Check it on the next tick; active in-session ownership will
+            // simply reschedule the normal 100-tick watchdog from tick().
+            level.scheduleTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get(), 1);
         }
     }
 
