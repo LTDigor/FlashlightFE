@@ -31,6 +31,8 @@ jobs:
         run: python3 -m unittest discover -s scripts -p '*_test.py'
       - name: Build and compile smoke tests
         run: ./gradlew --no-daemon build smokeClasses
+      - name: Run server GameTests
+        run: ./gradlew --no-daemon runGameTestServer
       - name: Validate version, changelog, metadata and production JAR
         run: python3 scripts/release.py validate
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
