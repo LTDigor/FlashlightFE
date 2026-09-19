@@ -467,7 +467,10 @@ public final class FlashlightEvents {
     }
 
     public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) clearPlayer(player);
+        if (event.getEntity() instanceof ServerPlayer player) {
+            clearPlayer(player);
+            DynamicLightCoordination.changedDimension(player, event.getFrom(), event.getTo());
+        }
     }
 
     public static void onLivingDeath(LivingDeathEvent event) {
@@ -479,6 +482,7 @@ public final class FlashlightEvents {
             LIGHT_OWNERS.remove(level.dimension());
             PLAYER_BEAMS.values().removeIf(beam -> beam.dimension().equals(level.dimension()));
             BEAM_CACHE.values().removeIf(cache -> cache.dimension().equals(level.dimension()));
+            DynamicLightCoordination.levelUnloaded(level.dimension());
         }
     }
 
