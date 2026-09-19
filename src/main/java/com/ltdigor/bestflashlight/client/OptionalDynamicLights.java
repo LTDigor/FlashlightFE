@@ -35,8 +35,8 @@ import org.slf4j.Logger;
  * Optional client-only bridge to LambDynamicLights.
  *
  * LDL polls custom behavior changes from its client-tick pipeline, so beam geometry
- * and occlusion are also updated once per client tick. This avoids doing nine world
- * raycasts per rendered frame while staying aligned with LDL's actual rebuild cadence.
+ * and occlusion are updated on client ticks and cached while static. This avoids
+ * world raycasts on every rendered frame while staying aligned with LDL's rebuild cadence.
  *
  * When every connected client reports a compatible, enabled LDL bridge, the server
  * disables its temporary block-light beam. This bridge then renders one cone for each
@@ -54,8 +54,8 @@ final class OptionalDynamicLights {
     private static final double DIAGONAL = Math.sqrt(0.5);
 
     // Centre, outer cardinal/diagonal ring, and a half-radius ring. Seventeen
-    // probes close the largest gaps of the old nine-ray pattern while tick-driven
-    // updates remain substantially cheaper than nine probes per rendered frame.
+    // probes close the largest gaps of the old sparse pattern; tick-driven updates
+    // plus the bounded static cache stay far cheaper than per-render-frame probing.
     private static final double[] SAMPLE_X = {
         0.0,
         1.0, -1.0, 0.0, 0.0, DIAGONAL, -DIAGONAL, DIAGONAL, -DIAGONAL,
