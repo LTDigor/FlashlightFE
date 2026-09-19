@@ -2,11 +2,11 @@
 
 ## 1.0.3
 
-- Add optional LambDynamicLights integration with a smooth client-side flashlight cone while keeping the vanilla server-light fallback.
+- Add optional LambDynamicLights integration with a client-side directional cone and smoothed aiming while keeping the vanilla server-light fallback.
 - Fix flashlight lighting when standing close to walls and partial collision blocks without allowing fallback light to tunnel through solids.
 - Make beam smoothing frame-rate independent and stable across exact or near-180-degree turns.
 - Align third-person dynamic beam origin with interpolated player motion and the actual handheld/headlamp emitter.
-- Respect FE and underwater settings in the optional dynamic-light path and clean up dynamic sources safely across world changes and failures.
+- Respect FE and underwater settings in the optional dynamic-light path, fall through unusable higher-priority lamps in the same tick, and clean up dynamic sources safely across world changes and failures.
 - Add regression coverage for cone geometry, wall clipping, optional LDL API compatibility and close-wall server behavior.
 
 ## 1.0.2
