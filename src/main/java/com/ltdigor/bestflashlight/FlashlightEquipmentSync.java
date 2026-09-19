@@ -31,6 +31,23 @@ public final class FlashlightEquipmentSync {
         return false;
     }
 
+    public static int signatureIgnoringEnergy(ItemStack stack) {
+        if (FlashlightMod.isFlashlight(stack)) {
+            ItemStack normalized = stack.copy();
+            normalized.remove(LampData.ENERGY.get());
+            return ItemStack.hashItemAndComponents(normalized);
+        }
+        if (stack.getItem() instanceof HeadbandItem) {
+            ItemStack mounted = LampData.mounted(stack);
+            if (mounted.isEmpty()) return ItemStack.hashItemAndComponents(stack);
+            mounted.remove(LampData.ENERGY.get());
+            ItemStack normalized = stack.copy();
+            LampData.mount(normalized, mounted);
+            return ItemStack.hashItemAndComponents(normalized);
+        }
+        return ItemStack.hashItemAndComponents(stack);
+    }
+
     public static boolean matchesIgnoringEnergy(ItemStack first, ItemStack second) {
         return ItemStack.matches(first, second) || isEnergyOnlyChange(first, second);
     }
