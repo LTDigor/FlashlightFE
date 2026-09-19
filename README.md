@@ -53,7 +53,9 @@ NeoForge uses `config/bestflashlight-server.toml` as the default server config. 
 | `beamRange` | 12.0 | Beam length, 1–32 blocks |
 | `coneAngleDegrees` | 15.0 | Full cone angle, 1–90 degrees |
 
-At 20 TPS, the default battery lasts about 8 minutes 20 seconds. Vanilla block lighting supplies the illumination, so soft light spreads outside the source-placement cone. The mod preserves source water, avoids flowing water and plants, and cleans up temporary light when the lamp stops emitting. Overlapping beams share light without one player removing another player's contribution. Near walls, tracing falls back to the eye position instead of losing the whole beam. Headbands place sources at forward ray endpoints to reduce illumination around the player; a close wall retains a dim local source. Vanilla block light still spreads in all directions around each source.
+At 20 TPS, the default battery lasts about 8 minutes 20 seconds. Without LambDynamicLights, vanilla block lighting supplies the illumination, so soft light spreads outside the source-placement cone. Temporary carriers preserve both source and flowing-water levels, avoid water plants, and clean themselves up after normal use and chunk reloads. Overlapping beams share light without one player removing another player's contribution. Near walls, tracing falls back safely instead of losing the whole beam. Headbands place sources at forward ray endpoints to reduce illumination around the player.
+
+If every player in the current dimension has a compatible, enabled LambDynamicLights bridge, the server skips its temporary block-light beam for that dimension and clients render directional cones for all visible players. Mixed or older clients automatically keep the server fallback. Static server beam geometry and client occlusion probes are cached between bounded refreshes to reduce CPU cost without changing FE drain.
 
 ## Source and assets
 
