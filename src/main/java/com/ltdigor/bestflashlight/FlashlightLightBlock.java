@@ -8,6 +8,7 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.LevelAccessor;
@@ -15,6 +16,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.BucketPickup;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.LiquidBlockContainer;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
@@ -29,7 +31,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /** Invisible light carrier whose water state survives ownership changes and reloads. */
-public final class FlashlightLightBlock extends Block implements BucketPickup {
+public final class FlashlightLightBlock extends Block implements BucketPickup, LiquidBlockContainer {
     public static final MapCodec<FlashlightLightBlock> CODEC = simpleCodec(FlashlightLightBlock::new);
     public static final IntegerProperty LEVEL = BlockStateProperties.LEVEL;
     public static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;
@@ -84,7 +86,30 @@ public final class FlashlightLightBlock extends Block implements BucketPickup {
     }
 
     @Override
-    public ItemStack pickupBlock(net.minecraft.world.entity.player.Player player, LevelAccessor level,
+    public boolean canPlaceLiquid(Player player, BlockGetter level, BlockPos pos,
+                                  BlockState state, Fluid fluid) {
+        return !state.getValue(WATERLOGGED) && fluid.isSame(Fluids.WATER);
+    }
+
+    @Override
+    public boolean placeLiquid(LevelAccessor level, BlockPos pos, BlockState state, FluidState fluidState) {
+        if (state.getValue(WATERLOGGED) || !fluidState.getType().isSame(Fluids.WATER)) return false;
+        BlockState legacy = fluidState.createLegacyBlock();
+        int waterLevel = legacy.is(Blocks.WATER) ? legacy.getValue(LiquidBlock.LEVEL) : 0;
+        level.setBlock(
+            pos,
+            state.setValue(WATERLOGGED, true).setValue(WATER_LEVEL, waterLevel),
+            Block.UPDATE_ALL
+        );
+        // Do not schedule the fluid itself in this cell: a normal FlowingFluid tick
+        // would replace the carrier with a legacy water block. Neighboring water can
+        // continue spreading through the container contract; restore() restarts the
+        // saved fluid once the light carrier is removed.
+        return true;
+    }
+
+    @Override
+    public ItemStack pickupBlock(Player player, LevelAccessor level,
                                  BlockPos pos, BlockState state) {
         if (!state.getValue(WATERLOGGED) || !getFluidState(state).isSource()) return ItemStack.EMPTY;
 
