@@ -14,8 +14,9 @@ public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) 
 
     /** Recover legacy handheld Curios through Curios' own inventory/drop path once per login. */
     public static void returnInvalidFlashlights(LivingEntity entity) {
-        if (entity.level().isClientSide() || !LEGACY_CHECKED.add(entity.getUUID())) return;
+        if (entity.level().isClientSide() || LEGACY_CHECKED.contains(entity.getUUID())) return;
         CuriosApi.getCuriosInventory(entity).ifPresent(inventory -> {
+            LEGACY_CHECKED.add(entity.getUUID());
             boolean changed = false;
             for (var slot : inventory.getCurios().values()) {
                 for (var items : java.util.List.of(slot.getStacks(), slot.getCosmeticStacks())) {
