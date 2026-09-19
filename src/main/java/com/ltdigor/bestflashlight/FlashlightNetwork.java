@@ -6,6 +6,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.Event;
 import net.neoforged.neoforge.common.NeoForge;
@@ -39,7 +40,9 @@ public final class FlashlightNetwork {
             if (!band.isEmpty()) LampEnergy.setSyncedStored(band, payload.energy());
         });
         optional.playToClient(HandheldEnergy.TYPE, HandheldEnergy.CODEC, (payload, context) -> {
-            ItemStack stack = context.player().getInventory().getItem(payload.inventorySlot());
+            int slot = payload.inventorySlot();
+            if (slot < 0 || slot > Inventory.SLOT_OFFHAND) return;
+            ItemStack stack = context.player().getInventory().getItem(slot);
             if (FlashlightMod.isFlashlight(stack)) LampEnergy.setSyncedStored(stack, payload.energy());
         });
     }
