@@ -10,6 +10,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.SimpleWaterloggedBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -28,7 +29,8 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
     public static final MapCodec<FlashlightLightBlock> CODEC = simpleCodec(FlashlightLightBlock::new);
     public static final IntegerProperty LEVEL = BlockStateProperties.LEVEL;
     public static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;
-    // Air/source-water fluid and support shapes remain unchanged. Avoid neighbor
+    public static final IntegerProperty WATER_LEVEL = IntegerProperty.create("water_level", 0, 15);
+    // Air/water fluid and support shapes remain unchanged. Avoid neighbor
     // updates, which could otherwise read an unloaded chunk across its boundary.
     static final int UPDATE_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
     private static final int CLEANUP_DELAY = 20;
@@ -36,7 +38,10 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
     public FlashlightLightBlock(Properties properties) {
         super(properties.replaceable().noCollission().noOcclusion().randomTicks().noLootTable()
             .lightLevel(state -> state.getValue(LEVEL)));
-        registerDefaultState(stateDefinition.any().setValue(LEVEL, 15).setValue(WATERLOGGED, false));
+        registerDefaultState(stateDefinition.any()
+            .setValue(LEVEL, 15)
+            .setValue(WATERLOGGED, false)
+            .setValue(WATER_LEVEL, 0));
     }
 
     @Override
@@ -46,7 +51,7 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(LEVEL, WATERLOGGED);
+        builder.add(LEVEL, WATERLOGGED, WATER_LEVEL);
     }
 
     @Override
@@ -61,13 +66,19 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
 
     @Override
     protected FluidState getFluidState(BlockState state) {
-        return state.getValue(WATERLOGGED) ? Fluids.WATER.getSource(false) : Fluids.EMPTY.defaultFluidState();
+        if (!state.getValue(WATERLOGGED)) return Fluids.EMPTY.defaultFluidState();
+        return Blocks.WATER.defaultBlockState()
+            .setValue(LiquidBlock.LEVEL, state.getValue(WATER_LEVEL))
+            .getFluidState();
     }
 
     @Override
     protected BlockState updateShape(BlockState state, Direction direction, BlockState neighbor,
                                      LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
-        if (state.getValue(WATERLOGGED)) level.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(level));
+        if (state.getValue(WATERLOGGED)) {
+            FluidState fluid = getFluidState(state);
+            level.scheduleTick(pos, fluid.getType(), fluid.getType().getTickDelay(level));
+        }
         return super.updateShape(state, direction, neighbor, level, pos, neighborPos);
     }
 
@@ -100,7 +111,9 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
     static void restore(ServerLevel level, BlockPos pos) {
         BlockState current = level.getBlockState(pos);
         if (current.getBlock() instanceof FlashlightLightBlock) {
-            BlockState restored = current.getValue(WATERLOGGED) ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState();
+            BlockState restored = current.getValue(WATERLOGGED)
+                ? Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, current.getValue(WATER_LEVEL))
+                : Blocks.AIR.defaultBlockState();
             level.setBlock(pos, restored, UPDATE_FLAGS);
         }
     }
