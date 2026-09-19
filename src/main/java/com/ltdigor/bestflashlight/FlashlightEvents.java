@@ -98,7 +98,9 @@ public final class FlashlightEvents {
         if (!DynamicLightCoordination.useServerFallback(player)) {
             clearPlayer(player);
             BEAM_CACHE.remove(owner);
-            LampEnergy.consume(source.stack(), player);
+            if (LampEnergy.consume(source.stack(), player)) {
+                FlashlightOwnerSync.syncDrain(player, source);
+            }
             return;
         }
 
@@ -121,7 +123,11 @@ public final class FlashlightEvents {
             && gameTick - cached.computedAtTick() < STATIC_BEAM_REFRESH_TICKS;
 
         if (reuse) {
-            if (!LampEnergy.consume(source.stack(), player)) clearPlayer(player);
+            if (!LampEnergy.consume(source.stack(), player)) {
+                clearPlayer(player);
+            } else {
+                FlashlightOwnerSync.syncDrain(player, source);
+            }
             return;
         }
 
@@ -146,6 +152,7 @@ public final class FlashlightEvents {
             clearPlayer(player);
             return;
         }
+        FlashlightOwnerSync.syncDrain(player, source);
 
         if (previous != null && !previous.dimension().equals(level.dimension())) {
             clearPlayer(player);
