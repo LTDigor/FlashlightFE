@@ -59,7 +59,8 @@ final class OptionalDynamicLights {
             return;
         }
 
-        Vec3 target = client.gameRenderer.getMainCamera().getLookVector();
+        var cameraLook = client.gameRenderer.getMainCamera().getLookVector();
+        Vec3 target = new Vec3(cameraLook.x(), cameraLook.y(), cameraLook.z());
         if (target.lengthSqr() < 1.0E-12) return;
         target = target.normalize();
         smoothDirection = smoothDirection == null
