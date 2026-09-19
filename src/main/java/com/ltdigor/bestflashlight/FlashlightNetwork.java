@@ -36,8 +36,7 @@ public final class FlashlightNetwork {
             NeoForge.EVENT_BUS.post(new FallbackModeEvent(payload.enabled())));
         optional.playToClient(HeadbandEnergy.TYPE, HeadbandEnergy.CODEC, (payload, context) -> {
             ItemStack band = LampSource.headband(context.player());
-            if (!band.isEmpty()
-                && FlashlightEquipmentSync.signatureIgnoringEnergy(band) == payload.signature()) {
+            if (!band.isEmpty()) {
                 int current = LampEnergy.stored(band);
                 if (current == payload.beforeEnergy() || current == payload.energy()) {
                     LampEnergy.setSyncedStored(band, payload.energy());
@@ -84,15 +83,14 @@ public final class FlashlightNetwork {
         @Override public Type<FallbackMode> type() { return TYPE; }
     }
 
-    public record HeadbandEnergy(int signature, int beforeEnergy, int energy) implements CustomPacketPayload {
+    public record HeadbandEnergy(int beforeEnergy, int energy) implements CustomPacketPayload {
         public static final Type<HeadbandEnergy> TYPE = new Type<>(FlashlightMod.resource("headband_energy"));
         public static final StreamCodec<RegistryFriendlyByteBuf, HeadbandEnergy> CODEC = StreamCodec.of(
             (buffer, value) -> {
-                buffer.writeInt(value.signature());
                 buffer.writeVarInt(value.beforeEnergy());
                 buffer.writeVarInt(value.energy());
             },
-            buffer -> new HeadbandEnergy(buffer.readInt(), buffer.readVarInt(), buffer.readVarInt()));
+            buffer -> new HeadbandEnergy(buffer.readVarInt(), buffer.readVarInt()));
         @Override public Type<HeadbandEnergy> type() { return TYPE; }
     }
 
