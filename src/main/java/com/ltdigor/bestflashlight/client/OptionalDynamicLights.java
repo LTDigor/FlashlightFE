@@ -127,6 +127,7 @@ final class OptionalDynamicLights {
         reportSupport(connection, support);
         if (!support) {
             deactivateAll();
+            activeLevel = client.level;
             readyReported = false;
             fallbackGraceTicks = 0;
             return;
@@ -134,6 +135,7 @@ final class OptionalDynamicLights {
 
         if (serverFallbackEnabled && fallbackGraceTicks <= 0) {
             deactivateAll();
+            activeLevel = client.level;
             readyReported = false;
             return;
         }
