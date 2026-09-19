@@ -89,21 +89,31 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
     @Override
     public boolean canPlaceLiquid(Player player, BlockGetter level, BlockPos pos,
                                   BlockState state, Fluid fluid) {
-        return !state.getValue(WATERLOGGED) && fluid.isSame(Fluids.WATER);
+        // The carrier is air-like. Water is represented inside the carrier so its
+        // light can survive flowing-water updates; every other fluid must still be
+        // allowed to replace a dry carrier exactly as it would replace air.
+        return !state.getValue(WATERLOGGED);
     }
 
     @Override
     public boolean placeLiquid(LevelAccessor level, BlockPos pos, BlockState state, FluidState fluidState) {
-        if (state.getValue(WATERLOGGED) || !fluidState.getType().isSame(Fluids.WATER)) return false;
+        if (state.getValue(WATERLOGGED) || fluidState.isEmpty()) return false;
+
         if (!level.isClientSide()) {
-            BlockState legacy = fluidState.createLegacyBlock();
-            int waterLevel = legacy.is(Blocks.WATER) ? legacy.getValue(LiquidBlock.LEVEL) : 0;
-            level.setBlock(
-                pos,
-                state.setValue(WATERLOGGED, true).setValue(WATER_LEVEL, waterLevel),
-                Block.UPDATE_ALL
-            );
-            level.scheduleTick(pos, fluidState.getType(), fluidState.getType().getTickDelay(level));
+            if (fluidState.getType().isSame(Fluids.WATER)) {
+                BlockState legacy = fluidState.createLegacyBlock();
+                int waterLevel = legacy.is(Blocks.WATER) ? legacy.getValue(LiquidBlock.LEVEL) : 0;
+                level.setBlock(
+                    pos,
+                    state.setValue(WATERLOGGED, true).setValue(WATER_LEVEL, waterLevel),
+                    Block.UPDATE_ALL
+                );
+                level.scheduleTick(pos, fluidState.getType(), fluidState.getType().getTickDelay(level));
+            } else {
+                // Non-water fluids cannot be represented by this carrier. Replace it
+                // with the real fluid block; onRemove() clears light ownership/cache.
+                level.setBlock(pos, fluidState.createLegacyBlock(), Block.UPDATE_ALL);
+            }
         }
         return true;
     }
