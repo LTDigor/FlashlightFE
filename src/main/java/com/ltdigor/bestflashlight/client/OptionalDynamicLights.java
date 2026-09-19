@@ -88,9 +88,11 @@ final class OptionalDynamicLights {
         Vec3 normalizedPlayerLook = playerLook.lengthSqr() < 1.0E-12
             ? client.player.getLookAngle().normalize()
             : playerLook.normalize();
+        Vec3 selectionLook = client.player.getLookAngle().normalize();
+        Vec3 selectionEye = client.player.getEyePosition();
         LampSource source = LampSource.select(client.player, candidate -> {
             if (!LampEnergy.hasPower(candidate.stack(), client.player)) return false;
-            Vec3 candidateEmitter = emitterOrigin(client.player, candidate, normalizedPlayerLook, playerEye);
+            Vec3 candidateEmitter = emitterOrigin(client.player, candidate, selectionLook, selectionEye);
             return FlashlightConfig.WORKS_UNDERWATER.get() || !isSubmerged(client.level, candidateEmitter);
         });
         if (source == null) {
