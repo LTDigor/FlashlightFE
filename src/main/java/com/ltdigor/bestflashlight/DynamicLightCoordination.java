@@ -81,8 +81,12 @@ final class DynamicLightCoordination {
         ServerLevel newLevel = server.getLevel(to);
         if (newLevel != null) {
             forceFallbackForTopologyChange(newLevel);
-            recompute(newLevel);
+            // Establish the fail-safe fallback state for the entering client first.
+            // recompute() may then request dynamic mode for everyone. Sending the
+            // fallback snapshot afterwards would overwrite that request and prevent
+            // this player from ever ACKing DynamicReady.
             sendCurrentMode(player, to);
+            recompute(newLevel);
         }
     }
 
