@@ -8,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
@@ -20,7 +21,9 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -291,6 +294,29 @@ public class BeamGameTests {
         BlockState restored = level.getBlockState(pos);
         helper.assertTrue(restored.is(Blocks.WATER) && restored.getValue(LiquidBlock.LEVEL) == 5,
             "Orphan cleanup must restore the exact flowing-water level");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void chunkLoadRearmsMissingOrphanCleanupTick(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
+        level.setBlock(pos, FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState(), 3);
+
+        BoundingBox box = new BoundingBox(
+            pos.getX(), pos.getY(), pos.getZ(),
+            pos.getX(), pos.getY(), pos.getZ()
+        );
+        level.getBlockTicks().clearArea(box);
+        helper.assertTrue(!level.getBlockTicks().hasScheduledTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Fixture must start with no scheduled cleanup tick");
+
+        invokeLifecycle("onChunkLoad", new ChunkEvent.Load(level.getChunkAt(pos), false));
+        invokeLifecycle("onServerTick", new ServerTickEvent.Pre(() -> true, level.getServer()));
+
+        helper.assertTrue(level.getBlockTicks().hasScheduledTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Chunk load must rearm cleanup for a persisted orphan carrier");
+        FlashlightLightBlock.restore(level, pos);
         helper.succeed();
     }
 
