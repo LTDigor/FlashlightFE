@@ -88,6 +88,9 @@ final class OptionalDynamicLights {
 
         var camera = client.gameRenderer.getMainCamera();
         boolean firstPerson = client.options.getCameraType().isFirstPerson();
+        float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
+        Vec3 playerLook = client.player.getViewVector(partialTick);
+        Vec3 playerEye = client.player.getEyePosition(partialTick);
         Vec3 start;
         Vec3 target;
         if (firstPerson) {
@@ -95,16 +98,15 @@ final class OptionalDynamicLights {
             var cameraLook = camera.getLookVector();
             target = new Vec3(cameraLook.x(), cameraLook.y(), cameraLook.z());
         } else {
-            start = client.player.getEyePosition();
-            target = client.player.getLookAngle();
+            target = playerLook;
+            start = emitterOrigin(client.player, source, playerLook.normalize(), playerEye);
         }
 
         if (target.lengthSqr() < 1.0E-12) {
             deactivate();
             return;
         }
-        Vec3 emitter = emitterOrigin(client.player, source, target.normalize());
-        if (!firstPerson) start = emitter;
+        Vec3 emitter = emitterOrigin(client.player, source, playerLook.normalize(), playerEye);
         if (!FlashlightConfig.WORKS_UNDERWATER.get() && isSubmerged(client.level, emitter)) {
             deactivate();
             return;
@@ -167,8 +169,7 @@ final class OptionalDynamicLights {
         return source != null && LampEnergy.hasPower(source.stack(), client.player);
     }
 
-    private static Vec3 emitterOrigin(Player player, LampSource source, Vec3 look) {
-        Vec3 eye = player.getEyePosition();
+    private static Vec3 emitterOrigin(Player player, LampSource source, Vec3 look, Vec3 eye) {
         if (source.headMounted()) return eye.add(look.scale(0.45)).add(0.0, 0.15, 0.0);
         double yaw = Math.toRadians(player.getYRot());
         Vec3 right = new Vec3(-Math.cos(yaw), 0.0, -Math.sin(yaw));
