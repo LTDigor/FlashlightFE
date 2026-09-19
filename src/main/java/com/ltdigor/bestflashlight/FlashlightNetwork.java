@@ -28,6 +28,9 @@ public final class FlashlightNetwork {
         optional.playToServer(DynamicSupport.TYPE, DynamicSupport.CODEC, (payload, context) -> {
             if (context.player() instanceof ServerPlayer player) DynamicLightCoordination.report(player, payload.active());
         });
+        optional.playToServer(DynamicReady.TYPE, DynamicReady.CODEC, (payload, context) -> {
+            if (context.player() instanceof ServerPlayer player) DynamicLightCoordination.ready(player);
+        });
         optional.playToClient(FallbackMode.TYPE, FallbackMode.CODEC, (payload, context) ->
             NeoForge.EVENT_BUS.post(new FallbackModeEvent(payload.enabled())));
     }
@@ -45,6 +48,12 @@ public final class FlashlightNetwork {
             (buffer, value) -> buffer.writeBoolean(value.active()),
             buffer -> new DynamicSupport(buffer.readBoolean()));
         @Override public Type<DynamicSupport> type() { return TYPE; }
+    }
+
+    public record DynamicReady() implements CustomPacketPayload {
+        public static final Type<DynamicReady> TYPE = new Type<>(FlashlightMod.resource("dynamic_ready"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, DynamicReady> CODEC = StreamCodec.unit(new DynamicReady());
+        @Override public Type<DynamicReady> type() { return TYPE; }
     }
 
     public record FallbackMode(boolean enabled) implements CustomPacketPayload {
