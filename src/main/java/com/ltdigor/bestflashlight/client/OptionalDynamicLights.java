@@ -117,6 +117,13 @@ final class OptionalDynamicLights {
             return;
         }
 
+        if (activeLevel != client.level) {
+            deactivateAll();
+            activeLevel = client.level;
+            reportedSupport = null;
+            readyReported = false;
+        }
+
         reportSupport(connection, support);
         if (!support) {
             deactivateAll();
@@ -129,11 +136,6 @@ final class OptionalDynamicLights {
             deactivateAll();
             readyReported = false;
             return;
-        }
-
-        if (activeLevel != client.level) {
-            deactivateAll();
-            activeLevel = client.level;
         }
 
         updateTrackedPlayers(client);
