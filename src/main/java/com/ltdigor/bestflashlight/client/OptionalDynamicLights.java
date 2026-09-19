@@ -169,10 +169,19 @@ final class OptionalDynamicLights {
             if (source == null) continue;
 
             Vec3 emitter = emitterOrigin(player, source, look, eye);
-            Vec3 start = emitterPathClear(client.level, player, eye, emitter) ? emitter : eye;
+            Vec3 start;
+            Vec3 target = look;
+            if (player == client.player && client.options.getCameraType().isFirstPerson()) {
+                var camera = client.gameRenderer.getMainCamera();
+                var cameraLook = camera.getLookVector();
+                target = new Vec3(cameraLook.x(), cameraLook.y(), cameraLook.z());
+                start = camera.getPosition();
+            } else {
+                start = emitterPathClear(client.level, player, eye, emitter) ? emitter : eye;
+            }
 
             DynamicCone cone = CONES.computeIfAbsent(player.getUUID(), OptionalDynamicLights::createCone);
-            cone.update(client.level, player, start, look, range, halfAngle);
+            cone.update(client.level, player, start, target, range, halfAngle);
             if (!cone.added && !addCone(cone)) {
                 disable();
                 return;
