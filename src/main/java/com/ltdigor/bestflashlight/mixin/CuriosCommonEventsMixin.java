@@ -4,6 +4,7 @@ import com.ltdigor.bestflashlight.FlashlightEquipmentSync;
 import com.ltdigor.bestflashlight.FlashlightNetwork;
 import com.ltdigor.bestflashlight.LampData;
 import com.ltdigor.bestflashlight.LampEnergy;
+import com.ltdigor.bestflashlight.LampSource;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
@@ -33,6 +34,7 @@ abstract class CuriosCommonEventsMixin {
     ) {
         if (FlashlightEquipmentSync.isEnergyOnlyChange(current, previous)
             && event.getEntity() instanceof ServerPlayer player
+            && LampSource.headband(player) == current
             && player.connection.hasChannel(FlashlightNetwork.HeadbandEnergy.TYPE)) {
             PacketDistributor.sendToPlayer(
                 player,
