@@ -238,6 +238,33 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void nonWaterFluidReplacesDryCarrierAndClearsOwnership(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(3, 2, 4));
+        UUID owner = UUID.randomUUID();
+
+        level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+        acquire(level, pos, owner, 15);
+        helper.assertTrue(level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Fixture must begin with a dry temporary carrier");
+        helper.assertTrue(FlashlightEvents.isTrackedLight(level.dimension(), pos),
+            "Fixture carrier must have light ownership");
+
+        var container = (net.minecraft.world.level.block.LiquidBlockContainer) FlashlightMod.FLASHLIGHT_LIGHT.get();
+        var lava = net.minecraft.world.level.material.Fluids.LAVA.getSource(false);
+        helper.assertTrue(container.canPlaceLiquid(null, level, pos, level.getBlockState(pos), lava.getType()),
+            "Dry carrier must not block lava or other non-water fluids");
+        helper.assertTrue(container.placeLiquid(level, pos, level.getBlockState(pos), lava),
+            "Non-water fluid placement must be accepted");
+
+        helper.assertTrue(level.getBlockState(pos).is(Blocks.LAVA),
+            "Non-water fluid must replace the temporary carrier with its real block");
+        helper.assertTrue(!FlashlightEvents.isTrackedLight(level.dimension(), pos),
+            "Replacing a carrier with non-water fluid must clear stale ownership");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void temporaryWaterCarrierPreservesVanillaBucketPickup(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos sourcePos = helper.absolutePos(new BlockPos(4, 2, 4));
