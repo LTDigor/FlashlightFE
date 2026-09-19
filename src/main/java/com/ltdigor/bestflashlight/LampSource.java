@@ -1,6 +1,7 @@
 package com.ltdigor.bestflashlight;
 
 import net.minecraft.world.entity.LivingEntity;
+import java.util.function.Predicate;
 import net.minecraft.world.item.ItemStack;
 import top.theillusivec4.curios.api.CuriosApi;
 
@@ -41,12 +42,31 @@ public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) 
     }
 
     public static LampSource select(LivingEntity entity) {
+        return select(entity, source -> true);
+    }
+
+    /**
+     * Returns the first enabled source in normal priority order that can actually
+     * be used by the caller. A temporarily unusable higher-priority lamp must not
+     * starve another enabled source (for example a submerged handheld blocking a
+     * dry headlamp when underwater operation is disabled).
+     */
+    public static LampSource select(LivingEntity entity, Predicate<LampSource> usable) {
         ItemStack main = entity.getMainHandItem();
-        if (FlashlightMod.isFlashlight(main) && LampData.enabled(main)) return new LampSource(main, false, false);
+        if (FlashlightMod.isFlashlight(main) && LampData.enabled(main)) {
+            LampSource source = new LampSource(main, false, false);
+            if (usable.test(source)) return source;
+        }
         ItemStack off = entity.getOffhandItem();
-        if (FlashlightMod.isFlashlight(off) && LampData.enabled(off)) return new LampSource(off, false, true);
+        if (FlashlightMod.isFlashlight(off) && LampData.enabled(off)) {
+            LampSource source = new LampSource(off, false, true);
+            if (usable.test(source)) return source;
+        }
         ItemStack band = headband(entity);
-        if (LampData.enabled(band)) return new LampSource(band, true, false);
+        if (LampData.enabled(band)) {
+            LampSource source = new LampSource(band, true, false);
+            if (usable.test(source)) return source;
+        }
         return null;
     }
 
