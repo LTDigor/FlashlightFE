@@ -12,7 +12,7 @@ final class FlashlightOwnerSync {
     private FlashlightOwnerSync() {}
 
     static void syncDrain(ServerPlayer player, LampSource source) {
-        if (source.headMounted() || player.isCreative()) return;
+        if (source.headMounted() || player.isCreative() || FlashlightConfig.ENERGY_PER_TICK.get() <= 0) return;
         if (!player.connection.hasChannel(FlashlightNetwork.HandheldEnergy.TYPE)) return;
 
         ItemStack current = source.stack();
@@ -27,7 +27,7 @@ final class FlashlightOwnerSync {
         for (int i = 0; i < count; i++) {
             if (menu.slots.get(i).getItem() != current) continue;
             ItemStack previous = remote.get(i);
-            if (!FlashlightMod.isFlashlight(previous)) continue;
+            if (!FlashlightEquipmentSync.isEnergyOnlyChange(previous, current)) continue;
 
             ItemStack normalized = previous.copy();
             normalized.set(LampData.ENERGY.get(), LampEnergy.stored(current));
