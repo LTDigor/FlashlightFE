@@ -5,6 +5,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /** Avoids full menu slot packets for the per-tick FE drain of a held flashlight. */
@@ -12,7 +13,8 @@ final class FlashlightOwnerSync {
     private FlashlightOwnerSync() {}
 
     static void syncDrain(ServerPlayer player, LampSource source) {
-        if (source.headMounted() || player.isCreative() || FlashlightConfig.ENERGY_PER_TICK.get() <= 0) return;
+        if (player instanceof FakePlayer || source.headMounted() || player.isCreative()
+            || FlashlightConfig.ENERGY_PER_TICK.get() <= 0) return;
         if (!player.connection.hasChannel(FlashlightNetwork.HandheldEnergy.TYPE)) return;
 
         ItemStack current = source.stack();
