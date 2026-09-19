@@ -474,6 +474,7 @@ final class OptionalDynamicLights {
         private boolean headMounted;
         private boolean offHand;
         private boolean useEmitter;
+        private Vec3 basisRight = new Vec3(1.0, 0.0, 0.0);
         private boolean geometryInitialized;
         private boolean added;
 
@@ -494,7 +495,8 @@ final class OptionalDynamicLights {
                 smoothDirection = target.normalize();
             }
             Vec3 axis = smoothDirection.normalize();
-            Vec3 right = rightVector(axis);
+            Vec3 right = rightVector(axis, basisRight);
+            basisRight = right;
             Vec3 up = right.cross(axis).normalize();
 
             boolean refreshOcclusion = hitDistances == null || hitBlocks == null
@@ -546,18 +548,21 @@ final class OptionalDynamicLights {
             Vec3 axis = smoothDirection == null || smoothDirection.lengthSqr() < 1.0E-12
                 ? target.normalize()
                 : smoothDirection.normalize();
-            Vec3 right = rightVector(axis);
+            Vec3 right = rightVector(axis, basisRight);
+            basisRight = right;
             Vec3 up = right.cross(axis).normalize();
             state.updateGeometry(start, axis, right, up, range, halfAngle);
             geometryInitialized = true;
             state.setActive(true);
         }
 
-        private static Vec3 rightVector(Vec3 axis) {
-            Vec3 reference = Math.abs(axis.y) > 0.99
-                ? new Vec3(1.0, 0.0, 0.0)
-                : new Vec3(0.0, 1.0, 0.0);
-            return axis.cross(reference).normalize();
+        private static Vec3 rightVector(Vec3 axis, Vec3 previousRight) {
+            Vec3 horizontal = new Vec3(-axis.z, 0.0, axis.x);
+            if (horizontal.lengthSqr() > 1.0E-10) return horizontal.normalize();
+
+            Vec3 projected = previousRight.subtract(axis.scale(previousRight.dot(axis)));
+            if (projected.lengthSqr() > 1.0E-10) return projected.normalize();
+            return new Vec3(1.0, 0.0, 0.0);
         }
     }
 
