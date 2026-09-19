@@ -56,7 +56,7 @@ class FlashlightEquipmentSyncTest {
 
         FlashlightEquipmentSync.advanceDirectEnergySnapshot(snapshot, current);
 
-        assertEquals(42, LampEnergy.stored(snapshot));
+        assertEquals(42, snapshot.getOrDefault(LampData.ENERGY.get(), 0));
         assertEquals(Component.literal("Named"), snapshot.get(DataComponents.CUSTOM_NAME));
         assertFalse(LampData.enabled(snapshot));
 
