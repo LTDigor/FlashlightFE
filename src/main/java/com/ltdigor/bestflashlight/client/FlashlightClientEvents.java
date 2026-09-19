@@ -112,6 +112,7 @@ public final class FlashlightClientEvents {
         // Actions come only from physical press events, never from repeatable click queues.
         while (HANDHELD.consumeClick()) {}
         while (HEADBAND.consumeClick()) {}
+        OptionalDynamicLights.clientTick();
     }
 
     private static void tooltip(ItemTooltipEvent event) {
