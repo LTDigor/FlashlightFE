@@ -50,8 +50,19 @@ final class OptionalDynamicLights {
     private static final double CLIENT_TICK_SECONDS = 1.0 / 20.0;
     private static final double DIAGONAL = Math.sqrt(0.5);
 
-    private static final double[] SAMPLE_X = {0.0, 1.0, -1.0, 0.0, 0.0, DIAGONAL, -DIAGONAL, DIAGONAL, -DIAGONAL};
-    private static final double[] SAMPLE_Y = {0.0, 0.0, 0.0, 1.0, -1.0, DIAGONAL, DIAGONAL, -DIAGONAL, -DIAGONAL};
+    // Centre, outer cardinal/diagonal ring, and a half-radius ring. Seventeen
+    // probes close the largest gaps of the old nine-ray pattern while tick-driven
+    // updates remain substantially cheaper than nine probes per rendered frame.
+    private static final double[] SAMPLE_X = {
+        0.0,
+        1.0, -1.0, 0.0, 0.0, DIAGONAL, -DIAGONAL, DIAGONAL, -DIAGONAL,
+        0.5, -0.5, 0.0, 0.0, 0.5 * DIAGONAL, -0.5 * DIAGONAL, 0.5 * DIAGONAL, -0.5 * DIAGONAL
+    };
+    private static final double[] SAMPLE_Y = {
+        0.0,
+        0.0, 0.0, 1.0, -1.0, DIAGONAL, DIAGONAL, -DIAGONAL, -DIAGONAL,
+        0.0, 0.0, 0.5, -0.5, 0.5 * DIAGONAL, 0.5 * DIAGONAL, -0.5 * DIAGONAL, -0.5 * DIAGONAL
+    };
 
     private static final Map<UUID, DynamicCone> CONES = new HashMap<>();
 
