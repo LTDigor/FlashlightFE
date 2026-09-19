@@ -44,6 +44,10 @@ public final class LampEnergy implements IEnergyStorage {
         }
     }
 
+    static void setSyncedStored(ItemStack stack, int amount) {
+        setStored(stack, amount);
+    }
+
     private static boolean creative(LivingEntity actor) {
         return actor instanceof Player player && player.isCreative();
     }
