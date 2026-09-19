@@ -81,6 +81,7 @@ final class OptionalDynamicLights {
     private static ClientLevel activeLevel;
     private static ClientPacketListener activeConnection;
     private static Boolean reportedSupport;
+    private static boolean readyReported;
 
     private OptionalDynamicLights() {}
 
@@ -95,6 +96,7 @@ final class OptionalDynamicLights {
             deactivateAll();
             activeConnection = connection;
             reportedSupport = null;
+            readyReported = false;
             serverFallbackEnabled = true;
         }
 
@@ -102,9 +104,9 @@ final class OptionalDynamicLights {
         boolean support = available && isDynamicLightingEnabled();
         reportSupport(connection, support);
 
-        if (!support || serverFallbackEnabled || client.level == null || client.player == null
-            || !client.player.isAlive() || client.player.isSpectator()) {
+        if (!support || serverFallbackEnabled || client.level == null || client.player == null) {
             deactivateAll();
+            readyReported = false;
             return;
         }
 
@@ -114,10 +116,12 @@ final class OptionalDynamicLights {
         }
 
         updateTrackedPlayers(client);
+        if (available) reportReady(connection);
     }
 
     private static void fallbackMode(FlashlightNetwork.FallbackModeEvent event) {
         serverFallbackEnabled = event.enabled();
+        readyReported = false;
         if (serverFallbackEnabled) deactivateAll();
     }
 
@@ -129,6 +133,15 @@ final class OptionalDynamicLights {
         if (Objects.equals(reportedSupport, support)) return;
         PacketDistributor.sendToServer(new FlashlightNetwork.DynamicSupport(support));
         reportedSupport = support;
+    }
+
+    private static void reportReady(ClientPacketListener connection) {
+        if (readyReported || connection == null
+            || !connection.hasChannel(FlashlightNetwork.DynamicReady.TYPE)) {
+            return;
+        }
+        PacketDistributor.sendToServer(new FlashlightNetwork.DynamicReady());
+        readyReported = true;
     }
 
     private static void updateTrackedPlayers(Minecraft client) {
@@ -343,6 +356,7 @@ final class OptionalDynamicLights {
         dynamicLightsModeIsEnabled = null;
         activeLevel = null;
         reportedSupport = null;
+        readyReported = false;
     }
 
     private static final class DynamicCone {
