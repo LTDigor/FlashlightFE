@@ -2,7 +2,10 @@ package com.ltdigor.bestflashlight;
 
 import blusunrize.immersiveengineering.common.blocks.metal.ChargingStationBlockEntity;
 import blusunrize.immersiveengineering.common.register.IEBlocks;
+import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -65,6 +68,42 @@ public class IntegrationGameTests {
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
             helper.assertTrue(LampEnergy.stored(main) == 0 && !LampData.enabled(main), "Empty lamp disables without negative charge");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void staticBeamCacheStillDrainsAndInvalidatesOnMovement(GameTestHelper helper) {
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "beam-cache"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
+            player.setYRot(0.0F);
+            player.setXRot(0.0F);
+            ItemStack lamp = lamp(20);
+            LampData.setEnabled(lamp, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            Object firstCache = beamCache(player.getUUID());
+            helper.assertTrue(firstCache != null && LampEnergy.stored(lamp) == 19,
+                "First emitting tick must build beam cache and consume FE");
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            Object secondCache = beamCache(player.getUUID());
+            helper.assertTrue(firstCache == secondCache,
+                "Static second tick must reuse cached server beam geometry");
+            helper.assertTrue(LampEnergy.stored(lamp) == 18,
+                "Reusing beam geometry must still consume FE every tick");
+
+            player.setPos(player.getX() + 0.25, player.getY(), player.getZ());
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            Object movedCache = beamCache(player.getUUID());
+            helper.assertTrue(movedCache != null && movedCache != secondCache,
+                "Player movement must invalidate cached beam geometry immediately");
+            helper.assertTrue(LampEnergy.stored(lamp) == 17,
+                "Recomputed beam must still consume exactly one tick of FE");
         } finally { remove(helper, player); }
         helper.succeed();
     }
@@ -267,6 +306,17 @@ public class IntegrationGameTests {
             }
         } finally { remove(helper, player); }
         helper.succeed();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object beamCache(UUID player) {
+        try {
+            Field field = FlashlightEvents.class.getDeclaredField("BEAM_CACHE");
+            field.setAccessible(true);
+            return ((Map<UUID, Object>) field.get(null)).get(player);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not inspect server beam cache", exception);
+        }
     }
 
     private static ItemStack lamp(int energy) {
