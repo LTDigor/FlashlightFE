@@ -37,6 +37,16 @@ class FlashlightBeamMathTest {
             "Smoothing must make progress toward the new direction");
     }
 
+    @Test void nearHalfTurnPreservesTargetsTurnSide() {
+        Vec3 previous = new Vec3(0, 0, 1);
+        Vec3 target = new Vec3(0.001, 0, -1).normalize();
+        Vec3 result = FlashlightBeamMath.smooth(previous, target, 0.38);
+
+        assertTrue(result.x > 0.0,
+            "Near-antipodal smoothing must follow the target's lateral direction");
+        assertTrue(result.dot(target) > previous.dot(target));
+    }
+
     @Test void smoothingIsFrameRateIndependent() {
         double at60 = FlashlightBeamMath.frameIndependentFactor(0.38, 1.0 / 60.0, 60.0);
         double at120 = FlashlightBeamMath.frameIndependentFactor(0.38, 1.0 / 120.0, 60.0);
