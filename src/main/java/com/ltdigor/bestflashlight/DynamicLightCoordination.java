@@ -70,6 +70,11 @@ final class DynamicLightCoordination {
         if (player instanceof FakePlayer) return;
         MinecraftServer server = player.getServer();
         UUID id = player.getUUID();
+        // Support/ready was reported for the old client level. Require a fresh
+        // DynamicSupport report after the destination ClientLevel is installed so
+        // a delayed old DynamicReady packet cannot satisfy the new dimension handoff.
+        ACTIVE_CLIENTS.remove(id);
+        READY_BY_DIMENSION.values().forEach(ready -> ready.remove(id));
 
         ServerLevel oldLevel = server.getLevel(from);
         if (oldLevel != null) {
