@@ -37,10 +37,6 @@ public final class FlashlightEquipmentSync {
         }
     }
 
-    public static boolean matchesIgnoringEnergy(ItemStack first, ItemStack second) {
-        return ItemStack.matches(first, second) || isEnergyOnlyChange(first, second);
-    }
-
     private static boolean matchesIgnoringDirectEnergy(ItemStack before, ItemStack after) {
         ItemStack beforeWithoutEnergy = before.copy();
         ItemStack afterWithoutEnergy = after.copy();
