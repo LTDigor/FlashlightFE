@@ -453,26 +453,25 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void chunkLoadRearmsMissingOrphanCleanupTick(GameTestHelper helper) {
+    public static void chunkLoadReplacesPersistedDelayedOrphanCleanupTick(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
         level.setBlock(pos, FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState(), 3);
 
-        BoundingBox box = new BoundingBox(
-            pos.getX(), pos.getY(), pos.getZ(),
-            pos.getX(), pos.getY(), pos.getZ()
-        );
-        level.getBlockTicks().clearArea(box);
-        helper.assertTrue(!level.getBlockTicks().hasScheduledTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get()),
-            "Fixture must start with no scheduled cleanup tick");
+        helper.assertTrue(level.getBlockTicks().hasScheduledTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Carrier placement must start with its normal delayed cleanup tick");
 
         invokeLifecycle("onChunkLoad", new ChunkEvent.Load(level.getChunkAt(pos), false));
         invokeLifecycle("onServerTick", new ServerTickEvent.Pre(() -> true, level.getServer()));
 
         helper.assertTrue(level.getBlockTicks().hasScheduledTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get()),
-            "Chunk load must rearm cleanup for a persisted orphan carrier");
-        FlashlightLightBlock.restore(level, pos);
-        helper.succeed();
+            "Chunk load must retain a cleanup tick after replacing the delayed watchdog");
+
+        helper.runAfterDelay(3, () -> {
+            helper.assertTrue(level.getBlockState(pos).isAir(),
+                "Persisted orphan carrier must be restored promptly instead of waiting 100 ticks");
+            helper.succeed();
+        });
     }
 
     @GameTest(template = "empty")
