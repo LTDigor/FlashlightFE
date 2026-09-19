@@ -1,17 +1,24 @@
 package com.ltdigor.bestflashlight.client;
 
 import com.ltdigor.bestflashlight.FlashlightConfig;
+import com.ltdigor.bestflashlight.FlashlightNetwork;
 import com.ltdigor.bestflashlight.LampEnergy;
 import com.ltdigor.bestflashlight.LampSource;
+import com.mojang.logging.LogUtils;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
-import org.slf4j.Logger;
-import com.mojang.logging.LogUtils;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.HumanoidArm;
@@ -20,171 +27,157 @@ import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.network.PacketDistributor;
+import org.slf4j.Logger;
 
 /**
  * Optional client-only bridge to LambDynamicLights.
  *
- * No LambDynamicLights class is referenced at link time. If LDL is absent or its
- * API is incompatible this class becomes a no-op and the existing server-owned
- * temporary light blocks remain the fallback implementation.
+ * LDL polls custom behavior changes from its client-tick pipeline, so beam geometry
+ * and occlusion are also updated once per client tick. This avoids doing nine world
+ * raycasts per rendered frame while staying aligned with LDL's actual rebuild cadence.
+ *
+ * When every connected client reports a compatible, enabled LDL bridge, the server
+ * disables its temporary block-light beam. This bridge then renders one cone for each
+ * tracked player, not just the local player. Mixed/old-client sessions keep the server
+ * fallback and this bridge stays inactive to avoid double-lighting.
  */
 final class OptionalDynamicLights {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final double NOMINAL_SMOOTHING = 0.38;
     private static final double NOMINAL_FPS = 60.0;
-    private static final double MAX_FRAME_SECONDS = 0.10;
+    private static final double CLIENT_TICK_SECONDS = 1.0 / 20.0;
     private static final double DIAGONAL = Math.sqrt(0.5);
 
-    // Centre + four cardinal edges + four diagonal edges. Unlike the previous
-    // implementation these are occlusion probes, not nine independent light sources.
     private static final double[] SAMPLE_X = {0.0, 1.0, -1.0, 0.0, 0.0, DIAGONAL, -DIAGONAL, DIAGONAL, -DIAGONAL};
     private static final double[] SAMPLE_Y = {0.0, 0.0, 0.0, 1.0, -1.0, DIAGONAL, DIAGONAL, -DIAGONAL, -DIAGONAL};
 
+    private static final Map<UUID, DynamicCone> CONES = new HashMap<>();
+
     private static boolean initialized;
     private static boolean available;
+    private static boolean serverFallbackEnabled = true;
     private static Object manager;
-    private static Object behavior;
     private static Method add;
     private static Method remove;
     private static Constructor<?> boundingBoxConstructor;
-    private static ConeState coneState;
-    private static boolean added;
+    private static Object config;
+    private static Method getDynamicLightsMode;
+    private static Method dynamicLightsModeIsEnabled;
     private static ClientLevel activeLevel;
-    private static Vec3 smoothDirection;
-    private static long lastFrameNanos;
+    private static ClientPacketListener activeConnection;
+    private static Boolean reportedSupport;
 
     private OptionalDynamicLights() {}
 
     static void register() {
-        NeoForge.EVENT_BUS.addListener(OptionalDynamicLights::render);
+        NeoForge.EVENT_BUS.addListener(OptionalDynamicLights::fallbackMode);
     }
 
     static void clientTick() {
-        if (!available || !added) return;
         Minecraft client = Minecraft.getInstance();
-        if (client.level == null || client.player == null || !client.player.isAlive() || client.player.isSpectator()
-            || !hasActivePoweredSource(client) || client.level != activeLevel) {
-            deactivate();
+        ClientPacketListener connection = client.getConnection();
+        if (connection != activeConnection) {
+            deactivateAll();
+            activeConnection = connection;
+            reportedSupport = null;
+            serverFallbackEnabled = true;
         }
+
+        ensureInitialized();
+        boolean support = available && isDynamicLightingEnabled();
+        reportSupport(connection, support);
+
+        if (!support || serverFallbackEnabled || client.level == null || client.player == null
+            || !client.player.isAlive() || client.player.isSpectator()) {
+            deactivateAll();
+            return;
+        }
+
+        if (activeLevel != client.level) {
+            deactivateAll();
+            activeLevel = client.level;
+        }
+
+        updateTrackedPlayers(client);
     }
 
-    private static void render(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
-        ensureInitialized();
-        if (!available) return;
+    private static void fallbackMode(FlashlightNetwork.FallbackModeEvent event) {
+        serverFallbackEnabled = event.enabled();
+        if (serverFallbackEnabled) deactivateAll();
+    }
 
-        Minecraft client = Minecraft.getInstance();
-        if (client.level == null || client.player == null || !client.player.isAlive() || client.player.isSpectator()) {
-            deactivate();
+    private static void reportSupport(ClientPacketListener connection, boolean support) {
+        if (connection == null || !connection.hasChannel(FlashlightNetwork.DynamicSupport.TYPE)) {
+            reportedSupport = null;
             return;
         }
+        if (Objects.equals(reportedSupport, support)) return;
+        PacketDistributor.sendToServer(new FlashlightNetwork.DynamicSupport(support));
+        reportedSupport = support;
+    }
 
-        if (activeLevel != null && activeLevel != client.level) deactivate();
-
-        var camera = client.gameRenderer.getMainCamera();
-        boolean firstPerson = client.options.getCameraType().isFirstPerson();
-        float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
-        Vec3 playerLook = client.player.getViewVector(partialTick);
-        Vec3 playerEye = client.player.getEyePosition(partialTick);
-        Vec3 normalizedPlayerLook = playerLook.lengthSqr() < 1.0E-12
-            ? client.player.getLookAngle().normalize()
-            : playerLook.normalize();
-        Vec3 selectionLook = client.player.getLookAngle().normalize();
-        Vec3 selectionEye = client.player.getEyePosition();
-        LampSource source = LampSource.select(client.player, candidate -> {
-            if (!LampEnergy.hasPower(candidate.stack(), client.player)) return false;
-            Vec3 candidateEmitter = emitterOrigin(client.player, candidate, selectionLook, selectionEye);
-            return FlashlightConfig.WORKS_UNDERWATER.get() || !isSubmerged(client.level, candidateEmitter);
-        });
-        if (source == null) {
-            deactivate();
-            return;
-        }
-
-        Vec3 start;
-        Vec3 target;
-        if (firstPerson) {
-            start = camera.getPosition();
-            var cameraLook = camera.getLookVector();
-            target = new Vec3(cameraLook.x(), cameraLook.y(), cameraLook.z());
-        } else {
-            target = playerLook;
-            start = emitterOrigin(client.player, source, normalizedPlayerLook, playerEye);
-        }
-
-        if (target.lengthSqr() < 1.0E-12) {
-            deactivate();
-            return;
-        }
-        long now = System.nanoTime();
-        double deltaSeconds = lastFrameNanos == 0L
-            ? 1.0 / NOMINAL_FPS
-            : Math.min(MAX_FRAME_SECONDS, Math.max(0.0, (now - lastFrameNanos) / 1_000_000_000.0));
-        lastFrameNanos = now;
-
-        double smoothing = FlashlightBeamMath.frameIndependentFactor(NOMINAL_SMOOTHING, deltaSeconds, NOMINAL_FPS);
-        smoothDirection = FlashlightBeamMath.smooth(smoothDirection, target, smoothing);
-        if (smoothDirection == null || smoothDirection.lengthSqr() < 1.0E-12) {
-            deactivate();
-            return;
-        }
-
-        Vec3 axis = smoothDirection.normalize();
-        Vec3 reference = Math.abs(axis.y) > 0.99 ? new Vec3(1.0, 0.0, 0.0) : new Vec3(0.0, 1.0, 0.0);
-        Vec3 right = axis.cross(reference).normalize();
-        Vec3 up = right.cross(axis).normalize();
+    private static void updateTrackedPlayers(Minecraft client) {
         double range = Math.clamp(FlashlightConfig.BEAM_RANGE.get(), 1.0, 32.0);
         double halfAngle = FlashlightBeamMath.halfAngleRadians(FlashlightConfig.CONE_ANGLE_DEGREES.get());
+        double maxDistance = client.options.getEffectiveRenderDistance() * 16.0 + range + 16.0;
+        double maxDistanceSqr = maxDistance * maxDistance;
+        Set<UUID> seen = new HashSet<>();
 
-        double[] hitDistances = new double[SAMPLE_X.length];
-        long[] hitBlocks = new long[SAMPLE_X.length];
-        Arrays.fill(hitBlocks, FlashlightBeamMath.NO_HIT_BLOCK);
-        for (int i = 0; i < SAMPLE_X.length; i++) {
-            Vec3 rayDirection = FlashlightBeamMath.coneDirection(
-                axis, right, up, halfAngle * SAMPLE_X[i], halfAngle * SAMPLE_Y[i]);
-            Vec3 requestedEnd = start.add(rayDirection.scale(range));
-            BlockHitResult hit = client.level.clip(new ClipContext(
-                start, requestedEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, client.player));
-            if (hit.getType() == HitResult.Type.MISS) {
-                hitDistances[i] = range;
-            } else {
-                hitDistances[i] = Math.max(0.0, start.distanceTo(hit.getLocation()));
-                hitBlocks[i] = hit.getBlockPos().asLong();
+        for (Player player : client.level.players()) {
+            if (!player.isAlive() || player.isSpectator()) continue;
+            if (player != client.player && player.distanceToSqr(client.player) > maxDistanceSqr) continue;
+
+            Vec3 look = player.getLookAngle();
+            if (look.lengthSqr() < 1.0E-12) continue;
+            look = look.normalize();
+            Vec3 eye = player.getEyePosition();
+
+            Vec3 selectionLook = look;
+            Vec3 selectionEye = eye;
+            LampSource source = LampSource.select(player, candidate -> {
+                if (!LampEnergy.hasPower(candidate.stack(), player)) return false;
+                Vec3 candidateEmitter = emitterOrigin(player, candidate, selectionLook, selectionEye);
+                return FlashlightConfig.WORKS_UNDERWATER.get() || !isSubmerged(client.level, candidateEmitter);
+            });
+            if (source == null) continue;
+
+            Vec3 emitter = emitterOrigin(player, source, look, eye);
+            Vec3 start = emitterPathClear(client.level, player, eye, emitter) ? emitter : eye;
+
+            DynamicCone cone = CONES.computeIfAbsent(player.getUUID(), OptionalDynamicLights::createCone);
+            cone.update(client.level, player, start, look, range, halfAngle);
+            if (!cone.added && !addCone(cone)) {
+                disable();
+                return;
             }
+            seen.add(player.getUUID());
         }
 
-        coneState.update(start, axis, right, up, range, halfAngle, hitDistances, hitBlocks);
-        coneState.setActive(true);
-        activeLevel = client.level;
-        if (!added) {
-            try {
-                // Mark first so a partially successful reflective add is still removable
-                // if the invoked implementation throws after registering the source.
-                added = true;
-                add.invoke(manager, behavior);
-            } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-                LOGGER.warn("LambDynamicLights flashlight source registration failed; using server light fallback", exception);
+        var iterator = CONES.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var entry = iterator.next();
+            if (seen.contains(entry.getKey())) continue;
+            if (!removeCone(entry.getValue())) {
+                iterator.remove();
                 disable();
+                return;
             }
+            iterator.remove();
         }
     }
 
-    private static boolean hasActivePoweredSource(Minecraft client) {
-        return LampSource.select(client.player,
-            source -> LampEnergy.hasPower(source.stack(), client.player)) != null;
+    private static boolean emitterPathClear(ClientLevel level, Player player, Vec3 eye, Vec3 emitter) {
+        BlockHitResult hit = level.clip(new ClipContext(
+            eye, emitter, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
+        return hit.getType() == HitResult.Type.MISS;
     }
 
     private static Vec3 emitterOrigin(Player player, LampSource source, Vec3 look, Vec3 eye) {
         if (source.headMounted()) return eye.add(look.scale(0.45)).add(0.0, 0.15, 0.0);
-        Vec3 right = new Vec3(-look.z, 0.0, look.x);
-        if (right.lengthSqr() < 1.0E-12) {
-            double yaw = Math.toRadians(player.getYRot());
-            right = new Vec3(-Math.cos(yaw), 0.0, -Math.sin(yaw));
-        } else {
-            right = right.normalize();
-        }
+        double yaw = Math.toRadians(player.getYRot());
+        Vec3 right = new Vec3(-Math.cos(yaw), 0.0, -Math.sin(yaw));
         boolean rightHand = (player.getMainArm() == HumanoidArm.RIGHT) != source.offHand();
         return eye.add(look.scale(0.55)).add(right.scale(rightHand ? 0.35 : -0.35)).add(0.0, -0.45, 0.0);
     }
@@ -199,11 +192,11 @@ final class OptionalDynamicLights {
     private static void ensureInitialized() {
         if (initialized) return;
         initialized = true;
+
         Class<?> lamb;
         try {
             lamb = Class.forName("dev.lambdaurora.lambdynlights.LambDynLights");
         } catch (ClassNotFoundException exception) {
-            // Optional dependency is simply not installed.
             disable();
             return;
         }
@@ -220,9 +213,12 @@ final class OptionalDynamicLights {
 
             add = manager.getClass().getMethod("add", behaviorClass);
             remove = manager.getClass().getMethod("remove", behaviorClass);
-            coneState = new ConeState();
-            InvocationHandler handler = OptionalDynamicLights::invokeBehavior;
-            behavior = Proxy.newProxyInstance(behaviorClass.getClassLoader(), new Class<?>[]{behaviorClass}, handler);
+
+            config = lamb.getField("config").get(instance);
+            getDynamicLightsMode = config.getClass().getMethod("getDynamicLightsMode");
+            Object mode = getDynamicLightsMode.invoke(config);
+            dynamicLightsModeIsEnabled = mode.getClass().getMethod("isEnabled");
+
             available = true;
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
             LOGGER.warn("LambDynamicLights was detected but its API is incompatible; using server light fallback", exception);
@@ -230,73 +226,161 @@ final class OptionalDynamicLights {
         }
     }
 
-    private static Object invokeBehavior(Object proxy, Method method, Object[] args) throws ReflectiveOperationException {
+    private static boolean isDynamicLightingEnabled() {
+        if (!available) return false;
+        try {
+            Object mode = getDynamicLightsMode.invoke(config);
+            return (boolean) dynamicLightsModeIsEnabled.invoke(mode);
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            LOGGER.warn("Could not query LambDynamicLights mode; using server light fallback", exception);
+            disable();
+            return false;
+        }
+    }
+
+    private static DynamicCone createCone(UUID owner) {
+        ConeState state = new ConeState();
+        try {
+            Class<?> behaviorClass = Class.forName("dev.lambdaurora.lambdynlights.api.behavior.DynamicLightBehavior");
+            InvocationHandler handler = (proxy, method, args) -> invokeBehavior(owner, state, proxy, method, args);
+            Object behavior = Proxy.newProxyInstance(
+                behaviorClass.getClassLoader(), new Class<?>[]{behaviorClass}, handler);
+            return new DynamicCone(state, behavior);
+        } catch (ClassNotFoundException exception) {
+            throw new IllegalStateException("LDL behavior API disappeared after initialization", exception);
+        }
+    }
+
+    private static Object invokeBehavior(UUID owner, ConeState state, Object proxy, Method method, Object[] args)
+        throws ReflectiveOperationException {
         return switch (method.getName()) {
-            case "lightAtPos" -> available && coneState != null && coneState.isActive()
-                ? coneState.lightAt((BlockPos) args[0]) : 0.0;
+            case "lightAtPos" -> available && state.isActive() ? state.lightAt((BlockPos) args[0]) : 0.0;
             case "getBoundingBox" -> {
-                int[] bounds = coneState.bounds();
+                int[] bounds = state.bounds();
                 yield boundingBoxConstructor.newInstance(
                     bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]);
             }
-            case "hasChanged" -> coneState != null && coneState.hasChanged();
-            case "isRemoved" -> !available || coneState == null || !coneState.isActive();
-            case "toString" -> "FlashlightFE dynamic cone";
+            case "hasChanged" -> state.hasChanged();
+            case "isRemoved" -> !available || !state.isActive();
+            case "toString" -> "FlashlightFE dynamic cone " + owner;
             case "hashCode" -> System.identityHashCode(proxy);
-            case "equals" -> proxy == args[0];
+            case "equals" -> args != null && args.length == 1 && proxy == args[0];
             default -> throw new UnsupportedOperationException("Unsupported LambDynamicLights method: " + method);
         };
     }
 
-    private static void deactivate() {
-        if (coneState != null) coneState.setActive(false);
-        if (!removeBehaviorQuietly()) {
-            // Do not attempt to add this proxy again after a failed removal. The proxy's
-            // isRemoved() now returns true, so LDL can also discard a leaked source itself.
-            available = false;
-            manager = null;
-            add = null;
-            remove = null;
+    private static boolean addCone(DynamicCone cone) {
+        try {
+            cone.state.setActive(true);
+            cone.added = true;
+            add.invoke(manager, cone.behavior);
+            return true;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            LOGGER.warn("LambDynamicLights flashlight source registration failed; using server light fallback", exception);
+            return false;
         }
-        activeLevel = null;
-        smoothDirection = null;
-        lastFrameNanos = 0L;
     }
 
-    private static boolean removeBehaviorQuietly() {
-        if (!added) return true;
-        boolean removed = true;
+    private static boolean removeCone(DynamicCone cone) {
+        cone.state.setActive(false);
+        if (!cone.added) return true;
         try {
-            if (manager != null && behavior != null && remove != null) {
-                remove.invoke(manager, behavior);
-            }
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
-            // The LDL world/manager can disappear during client world teardown.
-            removed = false;
+            if (manager != null && remove != null) remove.invoke(manager, cone.behavior);
+            return true;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            LOGGER.warn("LambDynamicLights flashlight source removal failed; disabling optional bridge", exception);
+            return false;
         } finally {
-            added = false;
+            cone.added = false;
         }
-        return removed;
+    }
+
+    private static void deactivateAll() {
+        boolean failed = false;
+        for (DynamicCone cone : CONES.values()) {
+            if (!removeCone(cone)) failed = true;
+        }
+        CONES.clear();
+        activeLevel = null;
+        if (failed) {
+            available = false;
+            reportedSupport = null;
+        }
     }
 
     private static void disable() {
-        if (coneState != null) coneState.setActive(false);
-        removeBehaviorQuietly();
+        for (DynamicCone cone : CONES.values()) {
+            cone.state.setActive(false);
+            if (cone.added && manager != null && remove != null) {
+                try {
+                    remove.invoke(manager, cone.behavior);
+                } catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
+                    // The proxy remains fail-closed: zero light and isRemoved() == true.
+                }
+            }
+            cone.added = false;
+        }
+        CONES.clear();
         available = false;
         manager = null;
         add = null;
         remove = null;
-        // Keep the proxy/state metadata alive if registration partially succeeded:
-        // a leaked LDL reference can then return zero light and isRemoved() == true.
+        boundingBoxConstructor = null;
+        config = null;
+        getDynamicLightsMode = null;
+        dynamicLightsModeIsEnabled = null;
         activeLevel = null;
-        smoothDirection = null;
-        lastFrameNanos = 0L;
+        reportedSupport = null;
     }
 
-    /**
-     * Mutable state behind the reflected DynamicLightBehavior. One behavior gives LDL
-     * the actual spotlight volume while the nine probes only define wall occlusion.
-     */
+    private static final class DynamicCone {
+        private final ConeState state;
+        private final Object behavior;
+        private Vec3 smoothDirection;
+        private boolean added;
+
+        private DynamicCone(ConeState state, Object behavior) {
+            this.state = state;
+            this.behavior = behavior;
+        }
+
+        private void update(ClientLevel level, Player player, Vec3 start, Vec3 target,
+                            double range, double halfAngle) {
+            double smoothing = FlashlightBeamMath.frameIndependentFactor(
+                NOMINAL_SMOOTHING, CLIENT_TICK_SECONDS, NOMINAL_FPS);
+            smoothDirection = FlashlightBeamMath.smooth(smoothDirection, target, smoothing);
+            Vec3 axis = smoothDirection == null || smoothDirection.lengthSqr() < 1.0E-12
+                ? target.normalize()
+                : smoothDirection.normalize();
+
+            Vec3 reference = Math.abs(axis.y) > 0.99
+                ? new Vec3(1.0, 0.0, 0.0)
+                : new Vec3(0.0, 1.0, 0.0);
+            Vec3 right = axis.cross(reference).normalize();
+            Vec3 up = right.cross(axis).normalize();
+
+            double[] hitDistances = new double[SAMPLE_X.length];
+            long[] hitBlocks = new long[SAMPLE_X.length];
+            Arrays.fill(hitBlocks, FlashlightBeamMath.NO_HIT_BLOCK);
+            for (int i = 0; i < SAMPLE_X.length; i++) {
+                Vec3 rayDirection = FlashlightBeamMath.coneDirection(
+                    axis, right, up, halfAngle * SAMPLE_X[i], halfAngle * SAMPLE_Y[i]);
+                Vec3 requestedEnd = start.add(rayDirection.scale(range));
+                BlockHitResult hit = level.clip(new ClipContext(
+                    start, requestedEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
+                if (hit.getType() == HitResult.Type.MISS) {
+                    hitDistances[i] = range;
+                } else {
+                    hitDistances[i] = Math.max(0.0, start.distanceTo(hit.getLocation()));
+                    hitBlocks[i] = hit.getBlockPos().asLong();
+                }
+            }
+
+            state.update(start, axis, right, up, range, halfAngle, hitDistances, hitBlocks);
+            state.setActive(true);
+        }
+    }
+
     private static final class ConeState {
         private static final double POSITION_EPSILON_SQR = 0.0025 * 0.0025;
         private static final double DIRECTION_DOT_EPSILON = Math.cos(Math.toRadians(0.10));
@@ -335,9 +419,6 @@ final class OptionalDynamicLights {
                 || occlusionChanged(newHitDistances, newHitBlocks);
 
             if (!changed) return;
-            // Keep the behavior state frozen until we also advance the revision.
-            // Otherwise tiny per-frame changes could alter lightAtPos() forever while
-            // hasChanged() keeps returning false and LDL never rebuilds the affected chunks.
             origin = newOrigin;
             axis = newAxis;
             right = newRight;
