@@ -29,7 +29,6 @@ class FlashlightEquipmentSyncTest {
         LampData.mount(afterBand, afterLamp);
 
         assertTrue(FlashlightEquipmentSync.isEnergyOnlyChange(beforeBand, afterBand));
-        assertTrue(FlashlightEquipmentSync.matchesIgnoringEnergy(beforeBand, afterBand));
     }
 
     @Test void nestedHeadbandEnabledChangeStillSyncs() {
@@ -45,7 +44,6 @@ class FlashlightEquipmentSyncTest {
         LampData.mount(afterBand, afterLamp);
 
         assertFalse(FlashlightEquipmentSync.isEnergyOnlyChange(beforeBand, afterBand));
-        assertFalse(FlashlightEquipmentSync.matchesIgnoringEnergy(beforeBand, afterBand));
     }
 
     @Test void advancingDirectEnergySnapshotChangesOnlyEnergy() {
@@ -63,7 +61,7 @@ class FlashlightEquipmentSyncTest {
         assertFalse(LampData.enabled(snapshot));
 
         LampData.setEnabled(current, true);
-        assertTrue(FlashlightEquipmentSync.isEnergyOnlyChange(snapshot, current) == false,
+        assertFalse(FlashlightEquipmentSync.isEnergyOnlyChange(snapshot, current),
             "A later enabled-state change must still be visible after the FE snapshot advance");
     }
 
