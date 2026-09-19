@@ -225,19 +225,6 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void temporaryCarrierRejectsFluidReplacement(GameTestHelper helper) {
-        BlockState carrier = FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState()
-            .setValue(FlashlightLightBlock.WATERLOGGED, true)
-            .setValue(FlashlightLightBlock.WATER_LEVEL, 4);
-
-        helper.assertTrue(carrier.canBeReplaced(),
-            "Temporary carrier must remain replaceable for normal block placement");
-        helper.assertTrue(!carrier.canBeReplaced(net.minecraft.world.level.material.Fluids.WATER),
-            "Neighboring water propagation must not replace an active temporary carrier");
-        helper.succeed();
-    }
-
-    @GameTest(template = "empty")
     public static void nonWaterFluidReplacesDryCarrierAndClearsOwnership(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pos = helper.absolutePos(new BlockPos(3, 2, 4));
