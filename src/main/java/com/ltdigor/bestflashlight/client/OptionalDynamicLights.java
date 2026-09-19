@@ -553,8 +553,14 @@ final class OptionalDynamicLights {
             double normalizedX = delta.dot(right) / radius;
             double normalizedY = delta.dot(up) / radius;
             int sample = FlashlightBeamMath.nearestConeSample(normalizedX, normalizedY, SAMPLE_X, SAMPLE_Y);
+            Vec3 sampleDirection = FlashlightBeamMath.coneDirection(
+                axis, right, up,
+                halfAngle * SAMPLE_X[sample],
+                halfAngle * SAMPLE_Y[sample]
+            );
+            double distanceAlongSampleRay = delta.dot(sampleDirection);
             return FlashlightBeamMath.visibleAtSample(
-                pos, delta.length(), hitDistances[sample], hitBlocks[sample]) ? luminance : 0.0;
+                pos, distanceAlongSampleRay, hitDistances[sample], hitBlocks[sample]) ? luminance : 0.0;
         }
 
         private int[] bounds() {
