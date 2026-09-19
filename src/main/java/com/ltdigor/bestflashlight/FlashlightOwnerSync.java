@@ -18,30 +18,31 @@ final class FlashlightOwnerSync {
         if (!player.connection.hasChannel(FlashlightNetwork.HandheldEnergy.TYPE)) return;
 
         ItemStack current = source.stack();
+        int beforeEnergy = advanceOnlyEnergy(player.containerMenu, current);
+        if (beforeEnergy < 0) return;
+
         int afterEnergy = LampEnergy.stored(current);
-        int beforeEnergy = Math.min(
-            FlashlightConfig.ENERGY_CAPACITY.get(),
-            afterEnergy + FlashlightConfig.ENERGY_PER_TICK.get()
-        );
         int inventorySlot = source.offHand() ? Inventory.SLOT_OFFHAND : player.getInventory().selected;
         PacketDistributor.sendToPlayer(
             player,
             new FlashlightNetwork.HandheldEnergy(inventorySlot, beforeEnergy, afterEnergy)
         );
-        advanceOnlyEnergy(player.containerMenu, current);
     }
 
-    static void advanceOnlyEnergy(AbstractContainerMenu menu, ItemStack current) {
+    static int advanceOnlyEnergy(AbstractContainerMenu menu, ItemStack current) {
         var remote = ((AbstractContainerMenuAccessor) menu).bestflashlight$getRemoteSlots();
         int count = Math.min(menu.slots.size(), remote.size());
+        int expectedClientEnergy = -1;
         for (int i = 0; i < count; i++) {
             if (menu.slots.get(i).getItem() != current) continue;
             ItemStack previous = remote.get(i);
             if (!FlashlightEquipmentSync.isEnergyOnlyChange(previous, current)) continue;
 
+            if (expectedClientEnergy < 0) expectedClientEnergy = LampEnergy.stored(previous);
             ItemStack normalized = previous.copy();
             normalized.set(LampData.ENERGY.get(), LampEnergy.stored(current));
             remote.set(i, normalized);
         }
+        return expectedClientEnergy;
     }
 }
