@@ -280,6 +280,44 @@ public class IntegrationGameTests {
     }
 
     @GameTest(template = "empty", batch = "emitter_occlusion")
+    public static void partialCollisionCellCanUseOpenSide(GameTestHelper helper) {
+        var player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "pane-open-side-test"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            var pane = Blocks.GLASS_PANE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST, true)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WEST, true);
+            for (int x = 0; x < 16; x++) for (int y = 0; y < 8; y++) {
+                helper.setBlock(new BlockPos(x, y, 4), pane);
+            }
+
+            var feet = helper.absoluteVec(new net.minecraft.world.phys.Vec3(8.5, 1, 4.12));
+            player.setPos(feet.x, feet.y, feet.z);
+            player.setYRot(180.0F);
+            player.setXRot(0.0F);
+            ItemStack lamp = lamp(50);
+            LampData.setEnabled(lamp, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+
+            boolean openSideLight = false;
+            int paneZ = helper.absolutePos(new BlockPos(0, 0, 4)).getZ();
+            for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 15)) {
+                if (helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
+                    helper.assertTrue(pos.getZ() < paneZ,
+                        "Looking away from a pane must never place fallback light through its collision plane");
+                    openSideLight = true;
+                }
+            }
+            helper.assertTrue(openSideLight,
+                "A partial-collision eye cell must still allow fallback light on its open side");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", batch = "emitter_occlusion")
     public static void partialCollisionFallbackCannotJumpThroughWallBehindPlayer(GameTestHelper helper) {
         var player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
             new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "pane-back-wall-test"));
