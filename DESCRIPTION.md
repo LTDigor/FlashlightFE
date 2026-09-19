@@ -22,7 +22,7 @@ Craft an empty headband using wool and string. Combine it with a flashlight in a
 
 ## Configuration
 
-Settings are in `config/bestflashlight-server.toml`, synchronized by the server, and take effect after restarting the world/server.
+Server defaults are read from `config/bestflashlight-server.toml`; an existing `<world>/serverconfig/bestflashlight-server.toml` overrides them for that world. Values are synchronized to clients and world-restart settings take effect after restarting the world/server.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
@@ -56,6 +56,6 @@ JEI **19.18+ within version 19** is optional. LambDynamicLights is also optional
 
 Для налобного фонаря соедините крепление и фонарик в любых ячейках крафта, затем наденьте результат в слот Curios `head`. Для снятия положите собранное крепление одно в сетку крафта. Заряд, имя и компоненты сохраняются.
 
-В `config/bestflashlight-server.toml` настраиваются ёмкость, расход FE, дальность и угол луча, работа под водой. Значение `energyPerTick=0` отключает расход. После изменения нужен перезапуск мира или сервера.
+По умолчанию настройки читаются из `config/bestflashlight-server.toml`; файл `<world>/serverconfig/bestflashlight-server.toml`, если он существует, переопределяет их для конкретного мира. Там настраиваются емкость, расход FE, дальность и угол луча, работа под водой. Значение `energyPerTick=0` отключает расход. Для world-restart параметров после изменения нужен перезапуск мира или сервера.
 
 Для зарядки подходят совместимые FE-зарядники, например станция Immersive Engineering. Новые фонари создаются без заряда. Мод устанавливается на клиент и сервер вместе с Curios; версии зависимостей указаны выше. Лицензия **MIT**, автор **LTDigor**.
