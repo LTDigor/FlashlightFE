@@ -39,8 +39,13 @@ public final class FlashlightNetwork {
             if (!band.isEmpty()) LampEnergy.setSyncedStored(band, payload.energy());
         });
         optional.playToClient(HandheldEnergy.TYPE, HandheldEnergy.CODEC, (payload, context) -> {
-            ItemStack stack = context.player().getItemInHand(payload.hand());
-            if (FlashlightMod.isFlashlight(stack)) LampEnergy.setSyncedStored(stack, payload.energy());
+            ItemStack stack = context.player().getInventory().getItem(payload.inventorySlot());
+            if (FlashlightMod.isFlashlight(stack)) {
+                int current = LampEnergy.stored(stack);
+                if (current == payload.beforeEnergy() || current == payload.energy()) {
+                    LampEnergy.setSyncedStored(stack, payload.energy());
+                }
+            }
         });
     }
 
@@ -81,14 +86,15 @@ public final class FlashlightNetwork {
         @Override public Type<HeadbandEnergy> type() { return TYPE; }
     }
 
-    public record HandheldEnergy(InteractionHand hand, int energy) implements CustomPacketPayload {
+    public record HandheldEnergy(int inventorySlot, int beforeEnergy, int energy) implements CustomPacketPayload {
         public static final Type<HandheldEnergy> TYPE = new Type<>(FlashlightMod.resource("handheld_energy"));
         public static final StreamCodec<RegistryFriendlyByteBuf, HandheldEnergy> CODEC = StreamCodec.of(
             (buffer, value) -> {
-                buffer.writeEnum(value.hand());
+                buffer.writeVarInt(value.inventorySlot());
+                buffer.writeVarInt(value.beforeEnergy());
                 buffer.writeVarInt(value.energy());
             },
-            buffer -> new HandheldEnergy(buffer.readEnum(InteractionHand.class), buffer.readVarInt())
+            buffer -> new HandheldEnergy(buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt())
         );
         @Override public Type<HandheldEnergy> type() { return TYPE; }
     }
