@@ -15,6 +15,7 @@ abstract class LivingEntityMixin {
                                                                CallbackInfoReturnable<Boolean> cir) {
         LivingEntity self = (LivingEntity) (Object) this;
         if (!self.level().isClientSide && FlashlightEquipmentSync.isEnergyOnlyChange(before, after)) {
+            FlashlightEquipmentSync.advanceDirectEnergySnapshot(before, after);
             cir.setReturnValue(false);
         }
     }
