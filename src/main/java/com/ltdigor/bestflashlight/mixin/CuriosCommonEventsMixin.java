@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Pseudo
-@Mixin(targets = "top.theillusivec4.curios.common.CuriosCommonEvents", remap = false)
+@Mixin(targets = "top.theillusivec4.curios.common.event.CuriosEventHandler", remap = false)
 abstract class CuriosCommonEventsMixin {
     @Redirect(
         method = "tick",
