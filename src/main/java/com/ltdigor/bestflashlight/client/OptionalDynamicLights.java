@@ -8,6 +8,8 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
+import org.slf4j.Logger;
+import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -29,6 +31,7 @@ import net.neoforged.neoforge.common.NeoForge;
  * temporary light blocks remain the fallback implementation.
  */
 final class OptionalDynamicLights {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final double NOMINAL_SMOOTHING = 0.38;
     private static final double NOMINAL_FPS = 60.0;
     private static final double MAX_FRAME_SECONDS = 0.10;
@@ -162,6 +165,7 @@ final class OptionalDynamicLights {
                 added = true;
                 add.invoke(manager, behavior);
             } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+                LOGGER.warn("LambDynamicLights flashlight source registration failed; using server light fallback", exception);
                 disable();
             }
         }
@@ -212,7 +216,11 @@ final class OptionalDynamicLights {
             InvocationHandler handler = OptionalDynamicLights::invokeBehavior;
             behavior = Proxy.newProxyInstance(behaviorClass.getClassLoader(), new Class<?>[]{behaviorClass}, handler);
             available = true;
+        } catch (ClassNotFoundException exception) {
+            // Optional dependency is simply not installed.
+            disable();
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            LOGGER.warn("LambDynamicLights was detected but its API is incompatible; using server light fallback", exception);
             disable();
         }
     }
