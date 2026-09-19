@@ -250,8 +250,8 @@ public class BeamGameTests {
             "Temporary flashlight carrier must preserve source-water bucket pickup"
         );
         helper.assertTrue(
-            !(FlashlightMod.FLASHLIGHT_LIGHT.get() instanceof net.minecraft.world.level.block.LiquidBlockContainer),
-            "Temporary flashlight carrier must not accept bucket placement as a waterlogged container"
+            FlashlightMod.FLASHLIGHT_LIGHT.get() instanceof net.minecraft.world.level.block.LiquidBlockContainer,
+            "Temporary flashlight carrier must accept water through LiquidBlockContainer without being replaced"
         );
 
         BlockPos dryPos = helper.absolutePos(new BlockPos(2, 2, 4));
@@ -331,32 +331,40 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void flowingWaterTickIsFrozenAndRestartedAroundCarrier(GameTestHelper helper) {
+    public static void flowingWaterTickPreservesCarrierAndContinuesSimulation(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos source = pos.west();
         UUID owner = UUID.randomUUID();
+
+        level.setBlock(source, Blocks.WATER.defaultBlockState(), 3);
         level.setBlock(pos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 4), 3);
-        var originalFluid = level.getFluidState(pos);
-        var fluidType = originalFluid.getType();
+        var fluidType = level.getFluidState(pos).getType();
         level.scheduleTick(pos, fluidType, 1);
-        helper.assertTrue(level.getFluidTicks().hasScheduledTick(pos, fluidType),
-            "Fixture must start with a queued flowing-water tick");
 
         acquire(level, pos, owner, 15);
 
         helper.assertTrue(level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
-            "Flowing-water cell must be replaced by the temporary carrier");
-        helper.assertTrue(!level.getFluidTicks().hasScheduledTick(pos, fluidType),
-            "Carrier placement must freeze the queued fluid tick in that cell");
+            "Flowing-water cell must use the temporary carrier");
+        helper.assertTrue(level.getFluidTicks().hasScheduledTick(pos, fluidType),
+            "Carrier must keep vanilla water simulation scheduled");
 
-        release(level, pos, owner);
+        helper.runAfterDelay(3, () -> {
+            BlockState carrier = level.getBlockState(pos);
+            helper.assertTrue(carrier.is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+                "Vanilla FlowingFluid tick must update water state without replacing the active carrier");
+            helper.assertTrue(carrier.getValue(FlashlightLightBlock.WATERLOGGED),
+                "Water fed by a neighboring source must remain represented inside the carrier");
 
-        BlockState restored = level.getBlockState(pos);
-        helper.assertTrue(restored.is(Blocks.WATER) && restored.getValue(LiquidBlock.LEVEL) == 4,
-            "Restore must preserve the exact flowing-water level");
-        helper.assertTrue(level.getFluidTicks().hasScheduledTick(pos, restored.getFluidState().getType()),
-            "Restore must restart water simulation after removing the carrier");
-        helper.succeed();
+            int simulatedLevel = carrier.getValue(FlashlightLightBlock.WATER_LEVEL);
+            release(level, pos, owner);
+
+            BlockState restored = level.getBlockState(pos);
+            helper.assertTrue(restored.is(Blocks.WATER)
+                    && restored.getValue(LiquidBlock.LEVEL) == simulatedLevel,
+                "Releasing the final owner must restore the water level produced by vanilla simulation");
+            helper.succeed();
+        });
     }
 
     @GameTest(template = "empty")
