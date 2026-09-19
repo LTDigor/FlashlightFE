@@ -151,8 +151,10 @@ final class OptionalDynamicLights {
         activeLevel = client.level;
         if (!added) {
             try {
-                add.invoke(manager, behavior);
+                // Mark first so a partially successful reflective add is still removable
+                // if the invoked implementation throws after registering the source.
                 added = true;
+                add.invoke(manager, behavior);
             } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
                 disable();
             }
