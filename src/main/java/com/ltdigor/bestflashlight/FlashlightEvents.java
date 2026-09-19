@@ -162,6 +162,21 @@ public final class FlashlightEvents {
         }
 
         if (best == null) {
+            // A thin collision shape (pane, fence, bars, etc.) can share the eye's
+            // block cell without actually containing the eye point. In that case the
+            // whole BlockState is not replaceable, so the forward scan has nowhere to
+            // place a temporary light even though the player is standing in free space.
+            // Walk back toward the camera side and use the first replaceable cell there.
+            for (double distance = 0.125; distance <= 1.25; distance += 0.125) {
+                BlockPos pos = BlockPos.containing(eye.subtract(axis.scale(distance)));
+                if (!loaded(level, pos)) break;
+                if (acceptsLight(level.getBlockState(pos))) {
+                    best = pos;
+                    break;
+                }
+            }
+        }
+        if (best == null) {
             BlockPos eyePos = BlockPos.containing(eye);
             if (loaded(level, eyePos) && acceptsLight(level.getBlockState(eyePos))) best = eyePos;
         }
