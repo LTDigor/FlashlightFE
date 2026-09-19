@@ -254,6 +254,21 @@ public class BeamGameTests {
             "Temporary flashlight carrier must not accept bucket placement as a waterlogged container"
         );
 
+        BlockPos dryPos = helper.absolutePos(new BlockPos(2, 2, 4));
+        level.setBlock(dryPos, FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState(), 3);
+        var container = (net.minecraft.world.level.block.LiquidBlockContainer) FlashlightMod.FLASHLIGHT_LIGHT.get();
+        var incomingFlow = Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 5).getFluidState();
+        helper.assertTrue(container.canPlaceLiquid(null, level, dryPos, level.getBlockState(dryPos), incomingFlow.getType()),
+            "Dry temporary carrier must advertise that it can accept water");
+        helper.assertTrue(container.placeLiquid(level, dryPos, level.getBlockState(dryPos), incomingFlow),
+            "Dry temporary carrier must accept incoming flowing water without being replaced");
+        BlockState filledCarrier = level.getBlockState(dryPos);
+        helper.assertTrue(filledCarrier.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
+                && filledCarrier.getValue(FlashlightLightBlock.WATERLOGGED)
+                && filledCarrier.getValue(FlashlightLightBlock.WATER_LEVEL) == 5,
+            "LiquidBlockContainer path must keep the carrier and preserve the exact incoming water level");
+        FlashlightLightBlock.restore(level, dryPos);
+
         level.setBlock(sourcePos, Blocks.WATER.defaultBlockState(), 3);
         acquire(level, sourcePos, sourceOwner, 15);
         var pickup = (net.minecraft.world.level.block.BucketPickup) FlashlightMod.FLASHLIGHT_LIGHT.get();
