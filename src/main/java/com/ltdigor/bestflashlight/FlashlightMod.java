@@ -32,7 +32,7 @@ public final class FlashlightMod {
     public static final DeferredHolder<Item, Item> HEADBAND = ITEMS.register("headband", () -> new HeadbandItem(new Item.Properties()));
     public static final DeferredHolder<Block, Block> FLASHLIGHT_LIGHT = BLOCKS.register("flashlight_light", () ->
         new FlashlightLightBlock(BlockBehaviour.Properties.of().replaceable().noCollission().noOcclusion()
-            .randomTicks().noLootTable().lightLevel(state -> state.getValue(FlashlightLightBlock.LEVEL))));
+            .noLootTable().lightLevel(state -> state.getValue(FlashlightLightBlock.LEVEL))));
     public static final DeferredHolder<RecipeSerializer<?>, RecipeSerializer<?>> HEADBAND_RECIPE = RECIPES.register(
         "headband_mount", () -> new SimpleCraftingRecipeSerializer<>(HeadbandRecipe::new));
 
