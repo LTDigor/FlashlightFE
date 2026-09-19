@@ -39,7 +39,6 @@ abstract class CuriosCommonEventsMixin {
             PacketDistributor.sendToPlayer(
                 player,
                 new FlashlightNetwork.HeadbandEnergy(
-                    FlashlightEquipmentSync.signatureIgnoringEnergy(current),
                     LampEnergy.stored(previous),
                     LampEnergy.stored(current)
                 )
