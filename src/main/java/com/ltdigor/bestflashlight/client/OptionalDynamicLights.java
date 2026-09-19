@@ -78,12 +78,6 @@ final class OptionalDynamicLights {
             return;
         }
 
-        LampSource source = LampSource.select(client.player);
-        if (source == null || !LampEnergy.hasPower(source.stack(), client.player)) {
-            deactivate();
-            return;
-        }
-
         if (activeLevel != null && activeLevel != client.level) deactivate();
 
         var camera = client.gameRenderer.getMainCamera();
@@ -91,6 +85,19 @@ final class OptionalDynamicLights {
         float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
         Vec3 playerLook = client.player.getViewVector(partialTick);
         Vec3 playerEye = client.player.getEyePosition(partialTick);
+        Vec3 normalizedPlayerLook = playerLook.lengthSqr() < 1.0E-12
+            ? client.player.getLookAngle().normalize()
+            : playerLook.normalize();
+        LampSource source = LampSource.select(client.player, candidate -> {
+            if (!LampEnergy.hasPower(candidate.stack(), client.player)) return false;
+            Vec3 candidateEmitter = emitterOrigin(client.player, candidate, normalizedPlayerLook, playerEye);
+            return FlashlightConfig.WORKS_UNDERWATER.get() || !isSubmerged(client.level, candidateEmitter);
+        });
+        if (source == null) {
+            deactivate();
+            return;
+        }
+
         Vec3 start;
         Vec3 target;
         if (firstPerson) {
@@ -99,19 +106,13 @@ final class OptionalDynamicLights {
             target = new Vec3(cameraLook.x(), cameraLook.y(), cameraLook.z());
         } else {
             target = playerLook;
-            start = emitterOrigin(client.player, source, playerLook.normalize(), playerEye);
+            start = emitterOrigin(client.player, source, normalizedPlayerLook, playerEye);
         }
 
         if (target.lengthSqr() < 1.0E-12) {
             deactivate();
             return;
         }
-        Vec3 emitter = emitterOrigin(client.player, source, playerLook.normalize(), playerEye);
-        if (!FlashlightConfig.WORKS_UNDERWATER.get() && isSubmerged(client.level, emitter)) {
-            deactivate();
-            return;
-        }
-
         long now = System.nanoTime();
         double deltaSeconds = lastFrameNanos == 0L
             ? 1.0 / NOMINAL_FPS
@@ -165,8 +166,8 @@ final class OptionalDynamicLights {
     }
 
     private static boolean hasActivePoweredSource(Minecraft client) {
-        LampSource source = LampSource.select(client.player);
-        return source != null && LampEnergy.hasPower(source.stack(), client.player);
+        return LampSource.select(client.player,
+            source -> LampEnergy.hasPower(source.stack(), client.player)) != null;
     }
 
     private static Vec3 emitterOrigin(Player player, LampSource source, Vec3 look, Vec3 eye) {
