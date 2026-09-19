@@ -24,7 +24,6 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
-import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -69,13 +68,6 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         return Shapes.empty();
-    }
-
-    @Override
-    protected boolean canBeReplaced(BlockState state, Fluid fluid) {
-        // Keep the carrier replaceable for normal block placement, but do not let
-        // neighboring fluid propagation overwrite it before the owning beam releases it.
-        return false;
     }
 
     @Override
