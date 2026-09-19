@@ -379,7 +379,7 @@ public class IntegrationGameTests {
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
 
             boolean openSideLight = false;
-            int paneZ = helper.absolutePos(new BlockPos(0, 0, 4)).getZ();
+            int paneZ = 4;
             for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 15)) {
                 if (helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
                     helper.assertTrue(pos.getZ() < paneZ,
