@@ -2,12 +2,10 @@ package com.ltdigor.bestflashlight;
 
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -73,16 +71,6 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
     }
 
     @Override
-    protected BlockState updateShape(BlockState state, Direction direction, BlockState neighbor,
-                                     LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
-        if (state.getValue(WATERLOGGED)) {
-            FluidState fluid = getFluidState(state);
-            level.scheduleTick(pos, fluid.getType(), fluid.getType().getTickDelay(level));
-        }
-        return super.updateShape(state, direction, neighbor, level, pos, neighborPos);
-    }
-
-    @Override
     protected void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
         super.onPlace(state, level, pos, oldState, movedByPiston);
         if (!level.isClientSide) level.scheduleTick(pos, this, CLEANUP_DELAY);
@@ -113,10 +101,15 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
     static void restore(ServerLevel level, BlockPos pos) {
         BlockState current = level.getBlockState(pos);
         if (current.getBlock() instanceof FlashlightLightBlock) {
-            BlockState restored = current.getValue(WATERLOGGED)
+            boolean waterlogged = current.getValue(WATERLOGGED);
+            BlockState restored = waterlogged
                 ? Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, current.getValue(WATER_LEVEL))
                 : Blocks.AIR.defaultBlockState();
             level.setBlock(pos, restored, UPDATE_FLAGS);
+            if (waterlogged) {
+                FluidState fluid = restored.getFluidState();
+                level.scheduleTick(pos, fluid.getType(), fluid.getType().getTickDelay(level));
+            }
         }
     }
 }
