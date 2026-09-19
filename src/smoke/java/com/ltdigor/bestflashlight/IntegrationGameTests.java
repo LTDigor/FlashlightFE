@@ -103,10 +103,13 @@ public class IntegrationGameTests {
                 "ENERGY optimization must not swallow a simultaneous enabled-state change");
 
             player.inventoryMenu.sendAllDataToRemote();
-            lamp.set(LampData.ENERGY.get(), 18);
-            FlashlightOwnerSync.advanceOnlyEnergy(player.inventoryMenu, lamp);
-            helper.assertTrue(LampEnergy.stored(remote.get(slotIndex)) == 18 && LampData.enabled(remote.get(slotIndex)),
-                "A pure ENERGY diff must advance the remote menu snapshot");
+            int expectedClientEnergy = LampEnergy.stored(remote.get(slotIndex));
+            lamp.set(LampData.ENERGY.get(), 37);
+            int reportedBefore = FlashlightOwnerSync.advanceOnlyEnergy(player.inventoryMenu, lamp);
+            helper.assertTrue(reportedBefore == expectedClientEnergy,
+                "Owner FE packet guard must use the actual remote snapshot, not infer the previous charge");
+            helper.assertTrue(LampEnergy.stored(remote.get(slotIndex)) == 37 && LampData.enabled(remote.get(slotIndex)),
+                "Any pure ENERGY diff, including an external charge jump, must advance the remote menu snapshot");
         } finally { remove(helper, player); }
         helper.succeed();
     }
