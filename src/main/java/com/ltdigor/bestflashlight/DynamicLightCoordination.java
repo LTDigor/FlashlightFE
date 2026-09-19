@@ -10,6 +10,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
+import net.neoforged.neoforge.common.util.FakePlayer;
 
 /**
  * Negotiates whether vanilla temporary block lighting is still required.
@@ -52,7 +53,7 @@ final class DynamicLightCoordination {
     }
 
     static boolean useServerFallback(ServerPlayer player) {
-        if (!supportsCoordinatedMode(player)) return true;
+        if (player instanceof FakePlayer || !supportsCoordinatedMode(player)) return true;
         return FALLBACK_BY_DIMENSION.getOrDefault(player.level().dimension(), true);
     }
 
@@ -82,6 +83,7 @@ final class DynamicLightCoordination {
 
     private static void recompute(ServerLevel level, UUID excludedPlayer) {
         var players = level.players().stream()
+            .filter(player -> !(player instanceof FakePlayer))
             .filter(player -> excludedPlayer == null || !player.getUUID().equals(excludedPlayer))
             .toList();
 
