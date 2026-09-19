@@ -148,6 +148,10 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
 
     public static boolean preserveCarrierDuringFluidTick(Level level, BlockPos pos,
                                                          BlockState replacement, int flags) {
+        if (!replacement.isAir() && !replacement.is(Blocks.WATER)) {
+            return level.setBlock(pos, replacement, flags);
+        }
+
         BlockState current = level.getBlockState(pos);
         if (!current.is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
             return level.setBlock(pos, replacement, flags);
@@ -165,7 +169,7 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
         }
 
         if (next == current) return false;
-        return level.setBlock(pos, next, UPDATE_FLAGS);
+        return level.setBlock(pos, next, flags);
     }
 
     static void rearmCleanup(ServerLevel level, BlockPos pos) {
@@ -201,6 +205,22 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
             if (waterlogged) {
                 FluidState fluid = restored.getFluidState();
                 level.scheduleTick(pos, fluid.getType(), fluid.getType().getTickDelay(level));
+            } else {
+                // The carrier is intentionally removed without broad neighbor block
+                // updates. Re-arm nearby fluid sources explicitly so stable water can
+                // flow into the newly restored air cell.
+                for (Direction direction : Direction.values()) {
+                    BlockPos neighborPos = pos.relative(direction);
+                    if (!level.hasChunkAt(neighborPos)) continue;
+                    FluidState neighborFluid = level.getFluidState(neighborPos);
+                    if (!neighborFluid.isEmpty()) {
+                        level.scheduleTick(
+                            neighborPos,
+                            neighborFluid.getType(),
+                            neighborFluid.getType().getTickDelay(level)
+                        );
+                    }
+                }
             }
         }
     }
