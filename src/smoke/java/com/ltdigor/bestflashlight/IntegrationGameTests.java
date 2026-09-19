@@ -89,6 +89,69 @@ public class IntegrationGameTests {
         helper.succeed();
     }
 
+
+    @GameTest(template = "empty")
+    public static void emptyPrioritySourceFallsThroughInSameTick(GameTestHelper helper) {
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fallback-energy"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
+            ItemStack main = lamp(0);
+            ItemStack off = lamp(10);
+            LampData.setEnabled(main, true);
+            LampData.setEnabled(off, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, main);
+            player.setItemSlot(EquipmentSlot.OFFHAND, off);
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+
+            helper.assertTrue(!LampData.enabled(main),
+                "An empty higher-priority source must switch itself off");
+            helper.assertTrue(LampEnergy.stored(off) == 9,
+                "A powered fallback source must emit in the same tick without a blackout gap");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", batch = "config")
+    public static void submergedHandheldDoesNotStarveDryHeadband(GameTestHelper helper) {
+        boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fallback-water"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            player.setPos(helper.absoluteVec(new net.minecraft.world.phys.Vec3(8.5, 1.4, 3.5)));
+            player.setYRot(0.0F);
+            player.setXRot(0.0F);
+            helper.setBlock(8, 2, 4, Blocks.WATER);
+
+            ItemStack main = lamp(10);
+            LampData.setEnabled(main, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, main);
+
+            ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get());
+            LampData.mount(band, lamp(10));
+            LampData.setEnabled(band, true);
+            var head = CuriosApi.getCuriosInventory(player).orElseThrow().getCurios().get("head").getStacks();
+            head.setStackInSlot(0, band);
+
+            FlashlightConfig.WORKS_UNDERWATER.set(false);
+            FlashlightConfig.WORKS_UNDERWATER.clearCache();
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+
+            helper.assertTrue(LampEnergy.stored(main) == 10,
+                "A submerged handheld skipped by config must not consume FE");
+            helper.assertTrue(LampEnergy.stored(head.getStackInSlot(0)) == 9,
+                "A dry enabled headband must emit instead of being starved by the submerged handheld");
+        } finally {
+            FlashlightConfig.WORKS_UNDERWATER.set(originalWorksUnderwater);
+            FlashlightConfig.WORKS_UNDERWATER.clearCache();
+            remove(helper, player);
+        }
+        helper.succeed();
+    }
+
     @GameTest(template = "empty", batch = "config")
     public static void waterDisabledAndZeroCostBehave(GameTestHelper helper) {
         boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
