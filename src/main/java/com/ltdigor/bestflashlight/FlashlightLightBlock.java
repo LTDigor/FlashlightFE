@@ -95,14 +95,16 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
     @Override
     public boolean placeLiquid(LevelAccessor level, BlockPos pos, BlockState state, FluidState fluidState) {
         if (state.getValue(WATERLOGGED) || !fluidState.getType().isSame(Fluids.WATER)) return false;
-        BlockState legacy = fluidState.createLegacyBlock();
-        int waterLevel = legacy.is(Blocks.WATER) ? legacy.getValue(LiquidBlock.LEVEL) : 0;
-        level.setBlock(
-            pos,
-            state.setValue(WATERLOGGED, true).setValue(WATER_LEVEL, waterLevel),
-            Block.UPDATE_ALL
-        );
-        level.scheduleTick(pos, fluidState.getType(), fluidState.getType().getTickDelay(level));
+        if (!level.isClientSide()) {
+            BlockState legacy = fluidState.createLegacyBlock();
+            int waterLevel = legacy.is(Blocks.WATER) ? legacy.getValue(LiquidBlock.LEVEL) : 0;
+            level.setBlock(
+                pos,
+                state.setValue(WATERLOGGED, true).setValue(WATER_LEVEL, waterLevel),
+                Block.UPDATE_ALL
+            );
+            level.scheduleTick(pos, fluidState.getType(), fluidState.getType().getTickDelay(level));
+        }
         return true;
     }
 
