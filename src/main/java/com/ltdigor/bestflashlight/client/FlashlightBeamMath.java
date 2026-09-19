@@ -28,14 +28,18 @@ final class FlashlightBeamMath {
         }
 
         if (dot < -0.9995) {
-            // Antipodal vectors have no unique shortest arc. Pick a stable
-            // perpendicular direction instead of nlerp collapsing back onto
-            // the old direction forever when t < 0.5.
-            Vec3 reference = Math.abs(from.y) < 0.9
-                ? new Vec3(0.0, 1.0, 0.0)
-                : new Vec3(1.0, 0.0, 0.0);
-            Vec3 perpendicular = from.cross(reference).normalize();
-            double angle = Math.PI * t;
+            // Near-antipodal vectors make the regular slerp denominator unstable.
+            // Preserve the target's tiny lateral component when it exists; only an
+            // exact half-turn needs an arbitrary but stable perpendicular direction.
+            Vec3 perpendicular = to.subtract(from.scale(dot));
+            if (perpendicular.lengthSqr() < 1.0E-12) {
+                Vec3 reference = Math.abs(from.y) < 0.9
+                    ? new Vec3(0.0, 1.0, 0.0)
+                    : new Vec3(1.0, 0.0, 0.0);
+                perpendicular = from.cross(reference);
+            }
+            perpendicular = perpendicular.normalize();
+            double angle = Math.acos(dot) * t;
             return from.scale(Math.cos(angle)).add(perpendicular.scale(Math.sin(angle))).normalize();
         }
 
