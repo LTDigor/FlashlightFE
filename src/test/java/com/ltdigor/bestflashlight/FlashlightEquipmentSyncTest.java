@@ -68,6 +68,39 @@ class FlashlightEquipmentSyncTest {
         assertFalse(FlashlightEquipmentSync.isEnergyOnlyChange(before, after));
     }
 
+    @Test void energyIndependentSignatureIgnoresChargeButNotState() {
+        ItemStack lampA = new ItemStack(FlashlightMod.FLASHLIGHT.get());
+        lampA.set(LampData.ENERGY.get(), 100);
+        ItemStack lampB = lampA.copy();
+        lampB.set(LampData.ENERGY.get(), 7);
+
+        ItemStack bandA = new ItemStack(FlashlightMod.HEADBAND.get());
+        ItemStack bandB = new ItemStack(FlashlightMod.HEADBAND.get());
+        LampData.mount(bandA, lampA);
+        LampData.mount(bandB, lampB);
+
+        assertEquals(
+            FlashlightEquipmentSync.signatureIgnoringEnergy(bandA),
+            FlashlightEquipmentSync.signatureIgnoringEnergy(bandB),
+            "Headband identity signature must ignore nested FE charge"
+        );
+
+        LampData.setEnabled(bandB, true);
+        assertNotEquals(
+            FlashlightEquipmentSync.signatureIgnoringEnergy(bandA),
+            FlashlightEquipmentSync.signatureIgnoringEnergy(bandB),
+            "Enabled state must remain part of the identity signature"
+        );
+
+        LampData.setEnabled(bandB, false);
+        bandB.set(DataComponents.CUSTOM_NAME, Component.literal("Other"));
+        assertNotEquals(
+            FlashlightEquipmentSync.signatureIgnoringEnergy(bandA),
+            FlashlightEquipmentSync.signatureIgnoringEnergy(bandB),
+            "Custom name must remain part of the identity signature"
+        );
+    }
+
     @Test void otherItemsAreNeverSpecialCased() {
         ItemStack before = new ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE);
         ItemStack after = before.copy();
