@@ -225,15 +225,48 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void temporaryWaterCarrierCannotBeBucketed(GameTestHelper helper) {
+    public static void temporaryWaterCarrierPreservesVanillaBucketPickup(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos sourcePos = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos flowingPos = helper.absolutePos(new BlockPos(6, 2, 4));
+        UUID sourceOwner = UUID.randomUUID();
+        UUID flowingOwner = UUID.randomUUID();
+
         helper.assertTrue(
-            !(FlashlightMod.FLASHLIGHT_LIGHT.get() instanceof net.minecraft.world.level.block.BucketPickup),
-            "Temporary flashlight carrier must not expose BucketPickup"
+            FlashlightMod.FLASHLIGHT_LIGHT.get() instanceof net.minecraft.world.level.block.BucketPickup,
+            "Temporary flashlight carrier must preserve source-water bucket pickup"
         );
         helper.assertTrue(
             !(FlashlightMod.FLASHLIGHT_LIGHT.get() instanceof net.minecraft.world.level.block.LiquidBlockContainer),
-            "Temporary flashlight carrier must not expose liquid-placement interactions"
+            "Temporary flashlight carrier must not accept bucket placement as a waterlogged container"
         );
+
+        level.setBlock(sourcePos, Blocks.WATER.defaultBlockState(), 3);
+        acquire(level, sourcePos, sourceOwner, 15);
+        var pickup = (net.minecraft.world.level.block.BucketPickup) FlashlightMod.FLASHLIGHT_LIGHT.get();
+        ItemStack bucket = pickup.pickupBlock(null, level, sourcePos, level.getBlockState(sourcePos));
+
+        helper.assertTrue(bucket.is(net.minecraft.world.item.Items.WATER_BUCKET),
+            "Source water represented by the carrier must still fill a bucket");
+        BlockState dryCarrier = level.getBlockState(sourcePos);
+        helper.assertTrue(dryCarrier.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
+                && !dryCarrier.getValue(FlashlightLightBlock.WATERLOGGED),
+            "Picking up represented source water must leave a dry temporary light carrier");
+        release(level, sourcePos, sourceOwner);
+        helper.assertTrue(level.getBlockState(sourcePos).isAir(),
+            "Dry carrier must restore to air after its final light owner releases it");
+
+        level.setBlock(flowingPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 4), 3);
+        acquire(level, flowingPos, flowingOwner, 15);
+        ItemStack flowingBucket = pickup.pickupBlock(null, level, flowingPos, level.getBlockState(flowingPos));
+        helper.assertTrue(flowingBucket.isEmpty(),
+            "Flowing water represented by the carrier must remain non-bucketable");
+        BlockState flowingCarrier = level.getBlockState(flowingPos);
+        helper.assertTrue(flowingCarrier.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
+                && flowingCarrier.getValue(FlashlightLightBlock.WATERLOGGED)
+                && flowingCarrier.getValue(FlashlightLightBlock.WATER_LEVEL) == 4,
+            "Failed flowing-water pickup must leave the exact carrier water state untouched");
+        release(level, flowingPos, flowingOwner);
         helper.succeed();
     }
 
