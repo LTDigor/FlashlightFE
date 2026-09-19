@@ -45,12 +45,21 @@ final class DynamicLightCoordination {
         ServerLevel oldLevel = server.getLevel(from);
         ServerLevel newLevel = server.getLevel(to);
         if (oldLevel != null) recompute(oldLevel, player.getUUID());
-        if (newLevel != null) recompute(newLevel);
+        if (newLevel != null) {
+            recompute(newLevel);
+            sendCurrentMode(player);
+        }
     }
 
     static boolean useServerFallback(ServerPlayer player) {
         if (!supportsCoordinatedMode(player)) return true;
         return FALLBACK_BY_DIMENSION.getOrDefault(player.level().dimension(), true);
+    }
+
+    private static void sendCurrentMode(ServerPlayer player) {
+        if (!player.connection.hasChannel(FlashlightNetwork.FallbackMode.TYPE)) return;
+        boolean fallback = FALLBACK_BY_DIMENSION.getOrDefault(player.level().dimension(), true);
+        player.connection.send(new FlashlightNetwork.FallbackMode(fallback));
     }
 
     static void levelUnloaded(ResourceKey<Level> dimension) {
