@@ -67,8 +67,8 @@ public class IntegrationGameTests {
             helper.assertTrue(LampEnergy.stored(off) == 19, "Unequipped lamp has no idle consumption");
             main = lamp(1); LampData.setEnabled(main, true); player.setItemSlot(EquipmentSlot.MAINHAND, main);
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
-            helper.assertTrue(LampEnergy.stored(main) == 0 && !LampData.enabled(main), "Empty lamp disables without negative charge");
+            helper.assertTrue(LampEnergy.stored(main) == 0 && !LampData.enabled(main),
+                "Final affordable FE tick must leave the lamp off immediately without negative charge");
         } finally { remove(helper, player); }
         helper.succeed();
     }
