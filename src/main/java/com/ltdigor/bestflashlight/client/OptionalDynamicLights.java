@@ -199,8 +199,16 @@ final class OptionalDynamicLights {
     private static void ensureInitialized() {
         if (initialized) return;
         initialized = true;
+        Class<?> lamb;
         try {
-            Class<?> lamb = Class.forName("dev.lambdaurora.lambdynlights.LambDynLights");
+            lamb = Class.forName("dev.lambdaurora.lambdynlights.LambDynLights");
+        } catch (ClassNotFoundException exception) {
+            // Optional dependency is simply not installed.
+            disable();
+            return;
+        }
+
+        try {
             Object instance = lamb.getMethod("get").invoke(null);
             manager = lamb.getMethod("dynamicLightBehaviorManager").invoke(instance);
 
@@ -216,9 +224,6 @@ final class OptionalDynamicLights {
             InvocationHandler handler = OptionalDynamicLights::invokeBehavior;
             behavior = Proxy.newProxyInstance(behaviorClass.getClassLoader(), new Class<?>[]{behaviorClass}, handler);
             available = true;
-        } catch (ClassNotFoundException exception) {
-            // Optional dependency is simply not installed.
-            disable();
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
             LOGGER.warn("LambDynamicLights was detected but its API is incompatible; using server light fallback", exception);
             disable();
