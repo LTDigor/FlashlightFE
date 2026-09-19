@@ -38,7 +38,11 @@ abstract class CuriosCommonEventsMixin {
             && player.connection.hasChannel(FlashlightNetwork.HeadbandEnergy.TYPE)) {
             PacketDistributor.sendToPlayer(
                 player,
-                new FlashlightNetwork.HeadbandEnergy(LampEnergy.stored(current))
+                new FlashlightNetwork.HeadbandEnergy(
+                    FlashlightEquipmentSync.signatureIgnoringEnergy(current),
+                    LampEnergy.stored(previous),
+                    LampEnergy.stored(current)
+                )
             );
 
             ItemStack currentLamp = LampData.mounted(current);
