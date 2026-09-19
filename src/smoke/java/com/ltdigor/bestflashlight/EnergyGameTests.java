@@ -104,10 +104,8 @@ public class EnergyGameTests {
             helper.assertTrue(LampEnergy.stored(lamp) == 1 && LampData.enabled(lamp),
                 "Changing to survival must immediately restore FE drain");
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
-            helper.assertTrue(LampEnergy.stored(lamp) == 0 && LampData.enabled(lamp),
-                "Last available survival FE must still power one tick");
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
-            helper.assertTrue(!LampData.enabled(lamp), "Empty survival lamp must switch itself off");
+            helper.assertTrue(LampEnergy.stored(lamp) == 0 && !LampData.enabled(lamp),
+                "Last available survival FE must power the current tick and switch the lamp off for the next one");
 
             ItemStack transitioning = lamp(2);
             player.setItemSlot(EquipmentSlot.MAINHAND, transitioning);
