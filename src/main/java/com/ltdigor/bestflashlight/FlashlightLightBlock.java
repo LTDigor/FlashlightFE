@@ -88,6 +88,12 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
         if (!level.isClientSide) level.scheduleTick(pos, this, CLEANUP_DELAY);
     }
 
+    static void rearmCleanup(ServerLevel level, BlockPos pos) {
+        if (level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
+            level.scheduleTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get(), CLEANUP_DELAY);
+        }
+    }
+
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState replacement, boolean movedByPiston) {
         if (!level.isClientSide && !replacement.is(this)) FlashlightEvents.forgetLight(level.dimension(), pos);
