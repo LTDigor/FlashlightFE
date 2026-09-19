@@ -33,10 +33,10 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
     // Air/water fluid and support shapes remain unchanged. Avoid neighbor
     // updates, which could otherwise read an unloaded chunk across its boundary.
     static final int UPDATE_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
-    private static final int CLEANUP_DELAY = 20;
+    private static final int CLEANUP_DELAY = 100;
 
     public FlashlightLightBlock(Properties properties) {
-        super(properties.replaceable().noCollission().noOcclusion().randomTicks().noLootTable()
+        super(properties.replaceable().noCollission().noOcclusion().noLootTable()
             .lightLevel(state -> state.getValue(LEVEL)));
         registerDefaultState(stateDefinition.any()
             .setValue(LEVEL, 15)
@@ -103,10 +103,6 @@ public final class FlashlightLightBlock extends Block implements SimpleWaterlogg
         }
     }
 
-    @Override
-    protected void randomTick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
-        tick(state, level, pos, random);
-    }
 
     static void restore(ServerLevel level, BlockPos pos) {
         BlockState current = level.getBlockState(pos);
