@@ -2,7 +2,7 @@ package com.ltdigor.bestflashlight;
 
 import com.ltdigor.bestflashlight.mixin.AbstractContainerMenuAccessor;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -16,8 +16,16 @@ final class FlashlightOwnerSync {
         if (!player.connection.hasChannel(FlashlightNetwork.HandheldEnergy.TYPE)) return;
 
         ItemStack current = source.stack();
-        InteractionHand hand = source.offHand() ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
-        PacketDistributor.sendToPlayer(player, new FlashlightNetwork.HandheldEnergy(hand, LampEnergy.stored(current)));
+        int afterEnergy = LampEnergy.stored(current);
+        int beforeEnergy = Math.min(
+            FlashlightConfig.ENERGY_CAPACITY.get(),
+            afterEnergy + FlashlightConfig.ENERGY_PER_TICK.get()
+        );
+        int inventorySlot = source.offHand() ? Inventory.SLOT_OFFHAND : player.getInventory().selected;
+        PacketDistributor.sendToPlayer(
+            player,
+            new FlashlightNetwork.HandheldEnergy(inventorySlot, beforeEnergy, afterEnergy)
+        );
         advanceOnlyEnergy(player.containerMenu, current);
     }
 
