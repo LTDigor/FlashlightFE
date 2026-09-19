@@ -351,10 +351,7 @@ final class OptionalDynamicLights {
         }
         CONES.clear();
         activeLevel = null;
-        if (failed) {
-            available = false;
-            reportedSupport = null;
-        }
+        if (failed) disable();
     }
 
     private static void disable() {
@@ -379,8 +376,20 @@ final class OptionalDynamicLights {
         getDynamicLightsMode = null;
         dynamicLightsModeIsEnabled = null;
         activeLevel = null;
-        reportedSupport = null;
         readyReported = false;
+        reportSupportLossNow();
+    }
+
+    private static void reportSupportLossNow() {
+        Minecraft client = Minecraft.getInstance();
+        ClientPacketListener connection = client.getConnection();
+        if (connection != null && client.level != null && client.player != null
+            && connection.hasChannel(FlashlightNetwork.DynamicSupport.TYPE)) {
+            PacketDistributor.sendToServer(new FlashlightNetwork.DynamicSupport(false));
+            reportedSupport = false;
+        } else {
+            reportedSupport = null;
+        }
     }
 
     private static final class DynamicCone {
