@@ -71,6 +71,7 @@ final class OptionalDynamicLights {
     private static boolean initialized;
     private static boolean available;
     private static boolean serverFallbackEnabled = true;
+    private static int fallbackGraceTicks;
     private static Object manager;
     private static Method add;
     private static Method remove;
@@ -98,6 +99,7 @@ final class OptionalDynamicLights {
             reportedSupport = null;
             readyReported = false;
             serverFallbackEnabled = true;
+            fallbackGraceTicks = 0;
         }
 
         ensureInitialized();
@@ -114,7 +116,14 @@ final class OptionalDynamicLights {
         }
 
         reportSupport(connection, support);
-        if (!support || serverFallbackEnabled) {
+        if (!support) {
+            deactivateAll();
+            readyReported = false;
+            fallbackGraceTicks = 0;
+            return;
+        }
+
+        if (serverFallbackEnabled && fallbackGraceTicks <= 0) {
             deactivateAll();
             readyReported = false;
             return;
@@ -126,13 +135,24 @@ final class OptionalDynamicLights {
         }
 
         updateTrackedPlayers(client);
+        if (serverFallbackEnabled) {
+            fallbackGraceTicks--;
+            return;
+        }
         if (available) reportReady(connection);
     }
 
     private static void fallbackMode(FlashlightNetwork.FallbackModeEvent event) {
+        boolean wasDynamic = !serverFallbackEnabled;
         serverFallbackEnabled = event.enabled();
         readyReported = false;
-        if (serverFallbackEnabled) deactivateAll();
+        if (serverFallbackEnabled) {
+            // Server fallback takes at least a player tick to repopulate temporary
+            // light blocks. Keep existing cones briefly to avoid a handoff blackout.
+            fallbackGraceTicks = wasDynamic ? 2 : 0;
+        } else {
+            fallbackGraceTicks = 0;
+        }
     }
 
     private static void reportSupport(ClientPacketListener connection, boolean support) {
@@ -376,6 +396,7 @@ final class OptionalDynamicLights {
         getDynamicLightsMode = null;
         dynamicLightsModeIsEnabled = null;
         activeLevel = null;
+        fallbackGraceTicks = 0;
         readyReported = false;
         reportSupportLossNow();
     }
