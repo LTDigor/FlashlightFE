@@ -38,6 +38,10 @@ public final class FlashlightNetwork {
             ItemStack band = LampSource.headband(context.player());
             if (!band.isEmpty()) LampEnergy.setSyncedStored(band, payload.energy());
         });
+        optional.playToClient(HandheldEnergy.TYPE, HandheldEnergy.CODEC, (payload, context) -> {
+            ItemStack stack = context.player().getItemInHand(payload.hand());
+            if (FlashlightMod.isFlashlight(stack)) LampEnergy.setSyncedStored(stack, payload.energy());
+        });
     }
 
     public record Toggle(LampControl.Action action) implements CustomPacketPayload {
@@ -76,6 +80,19 @@ public final class FlashlightNetwork {
             buffer -> new HeadbandEnergy(buffer.readVarInt()));
         @Override public Type<HeadbandEnergy> type() { return TYPE; }
     }
+
+    public record HandheldEnergy(InteractionHand hand, int energy) implements CustomPacketPayload {
+        public static final Type<HandheldEnergy> TYPE = new Type<>(FlashlightMod.resource("handheld_energy"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, HandheldEnergy> CODEC = StreamCodec.of(
+            (buffer, value) -> {
+                buffer.writeEnum(value.hand());
+                buffer.writeVarInt(value.energy());
+            },
+            buffer -> new HandheldEnergy(buffer.readEnum(InteractionHand.class), buffer.readVarInt())
+        );
+        @Override public Type<HandheldEnergy> type() { return TYPE; }
+    }
+
 
     public record Press(UUID owner, InteractionHand hand, boolean previousEnabled, boolean enabled) implements CustomPacketPayload {
         public static final Type<Press> TYPE = new Type<>(FlashlightMod.resource("press"));
