@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -33,7 +34,7 @@ public final class FlashlightEvents {
     private static final Map<ResourceKey<Level>, Map<BlockPos, Map<UUID, Integer>>> LIGHT_OWNERS = new HashMap<>();
     private static final Map<UUID, PlayerBeam> PLAYER_BEAMS = new HashMap<>();
     private static final Map<UUID, BeamCache> BEAM_CACHE = new HashMap<>();
-    private static final Map<ResourceKey<Level>, Set<BlockPos>> PENDING_CLEANUP_REARM = new HashMap<>();
+    private static final Map<ResourceKey<Level>, Set<BlockPos>> PENDING_CLEANUP_REARM = new ConcurrentHashMap<>();
 
     // Integer points inside a radius-three disk give 29 directions, including the
     // axis and cone edges. This keeps fallback quality while cutting server ray work
@@ -493,7 +494,8 @@ public final class FlashlightEvents {
 
     private static void onChunkLoad(ChunkEvent.Load event) {
         if (!(event.getLevel() instanceof ServerLevel level) || event.isNewChunk()) return;
-        Set<BlockPos> pending = PENDING_CLEANUP_REARM.computeIfAbsent(level.dimension(), ignored -> new HashSet<>());
+        Set<BlockPos> pending = PENDING_CLEANUP_REARM.computeIfAbsent(
+            level.dimension(), ignored -> ConcurrentHashMap.newKeySet());
         event.getChunk().findBlocks(
             state -> state.is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
             (pos, state) -> pending.add(pos.immutable())
@@ -503,8 +505,11 @@ public final class FlashlightEvents {
     private static void onServerTick(ServerTickEvent.Pre event) {
         if (PENDING_CLEANUP_REARM.isEmpty()) return;
         MinecraftServer server = event.getServer();
-        var pendingByDimension = new HashMap<>(PENDING_CLEANUP_REARM);
-        PENDING_CLEANUP_REARM.clear();
+        var pendingByDimension = new HashMap<ResourceKey<Level>, Set<BlockPos>>();
+        PENDING_CLEANUP_REARM.forEach((dimension, positions) -> {
+            Set<BlockPos> removed = PENDING_CLEANUP_REARM.remove(dimension);
+            if (removed != null && !removed.isEmpty()) pendingByDimension.put(dimension, removed);
+        });
         pendingByDimension.forEach((dimension, positions) -> {
             ServerLevel level = server.getLevel(dimension);
             if (level == null) return;
