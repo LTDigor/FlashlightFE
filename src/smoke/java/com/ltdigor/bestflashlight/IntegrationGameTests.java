@@ -176,6 +176,36 @@ public class IntegrationGameTests {
         } finally { remove(helper, player); }
         helper.succeed();
     }
+
+    @GameTest(template = "empty", batch = "emitter_occlusion")
+    public static void partialCollisionFallbackCannotJumpThroughWallBehindPlayer(GameTestHelper helper) {
+        var player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "pane-back-wall-test"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            var pane = Blocks.GLASS_PANE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST, true)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WEST, true);
+            for (int x = 0; x < 16; x++) for (int y = 0; y < 8; y++) {
+                helper.setBlock(new BlockPos(x, y, 4), pane);
+                helper.setBlock(new BlockPos(x, y, 3), Blocks.STONE);
+            }
+            var feet = helper.absoluteVec(new net.minecraft.world.phys.Vec3(8.5, 1, 4.12));
+            player.setPos(feet.x, feet.y, feet.z);
+            player.setYRot(0); player.setXRot(0);
+            ItemStack lamp = lamp(50); LampData.setEnabled(lamp, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+
+            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+
+            for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 2)) {
+                helper.assertTrue(!helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+                    "Close-wall fallback must never tunnel through a solid block behind the player");
+            }
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
     private static ItemStack lamp(int energy) {
         ItemStack lamp=new ItemStack(FlashlightMod.FLASHLIGHT.get());
         lamp.getCapability(Capabilities.EnergyStorage.ITEM).receiveEnergy(energy,false);
