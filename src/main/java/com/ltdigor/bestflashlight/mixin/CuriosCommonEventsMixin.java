@@ -21,7 +21,7 @@ abstract class CuriosCommonEventsMixin {
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/item/ItemStack;matches(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/item/ItemStack;)Z",
-            remap = false
+            remap = true
         ),
         require = 0,
         remap = false
