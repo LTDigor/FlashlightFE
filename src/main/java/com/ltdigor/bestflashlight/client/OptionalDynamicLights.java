@@ -561,12 +561,16 @@ final class OptionalDynamicLights {
         }
 
         private static Vec3 rightVector(Vec3 axis, Vec3 previousRight) {
-            Vec3 horizontal = new Vec3(-axis.z, 0.0, axis.x);
-            if (horizontal.lengthSqr() > 1.0E-10) return horizontal.normalize();
-
+            // Parallel-transport the previous basis onto the new cone plane. Using
+            // a world-horizontal vector here makes the sample field spin wildly when
+            // the beam is almost vertical and its tiny X/Z component changes azimuth.
             Vec3 projected = previousRight.subtract(axis.scale(previousRight.dot(axis)));
             if (projected.lengthSqr() > 1.0E-10) return projected.normalize();
-            return new Vec3(1.0, 0.0, 0.0);
+
+            Vec3 reference = Math.abs(axis.y) < 0.9
+                ? new Vec3(0.0, 1.0, 0.0)
+                : new Vec3(1.0, 0.0, 0.0);
+            return axis.cross(reference).normalize();
         }
     }
 
