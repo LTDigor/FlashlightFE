@@ -48,6 +48,25 @@ class FlashlightEquipmentSyncTest {
         assertFalse(FlashlightEquipmentSync.matchesIgnoringEnergy(beforeBand, afterBand));
     }
 
+    @Test void advancingDirectEnergySnapshotChangesOnlyEnergy() {
+        ItemStack snapshot = new ItemStack(FlashlightMod.FLASHLIGHT.get());
+        snapshot.set(LampData.ENERGY.get(), 100);
+        snapshot.set(DataComponents.CUSTOM_NAME, Component.literal("Named"));
+
+        ItemStack current = snapshot.copy();
+        current.set(LampData.ENERGY.get(), 42);
+
+        FlashlightEquipmentSync.advanceDirectEnergySnapshot(snapshot, current);
+
+        assertEquals(42, LampEnergy.stored(snapshot));
+        assertEquals(Component.literal("Named"), snapshot.get(DataComponents.CUSTOM_NAME));
+        assertFalse(LampData.enabled(snapshot));
+
+        LampData.setEnabled(current, true);
+        assertTrue(FlashlightEquipmentSync.isEnergyOnlyChange(snapshot, current) == false,
+            "A later enabled-state change must still be visible after the FE snapshot advance");
+    }
+
     @Test void enabledChangeStillCountsAsEquipmentChange() {
         ItemStack before = new ItemStack(FlashlightMod.FLASHLIGHT.get());
         ItemStack after = before.copy();
