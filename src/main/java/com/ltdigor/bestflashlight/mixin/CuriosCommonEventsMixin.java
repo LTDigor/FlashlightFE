@@ -56,6 +56,7 @@ abstract class CuriosCommonEventsMixin {
         EntityTickEvent.Post event
     ) {
         int slotIndex = BESTFLASHLIGHT_SLOT_INDEX.get();
+        BESTFLASHLIGHT_SLOT_INDEX.set(-1);
         if (FlashlightEquipmentSync.isEnergyOnlyChange(current, previous)
             && event.getEntity() instanceof ServerPlayer player
             && slotIndex >= 0
