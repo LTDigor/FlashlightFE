@@ -1,10 +1,12 @@
 package com.ltdigor.bestflashlight.mixin;
 
 import com.ltdigor.bestflashlight.FlashlightEquipmentSync;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.ltdigor.bestflashlight.FlashlightNetwork;
+import com.ltdigor.bestflashlight.LampData;
+import com.ltdigor.bestflashlight.LampEnergy;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,9 +15,6 @@ import top.theillusivec4.curios.common.CuriosCommonEvents;
 
 @Mixin(CuriosCommonEvents.class)
 abstract class CuriosCommonEventsMixin {
-    private static final ThreadLocal<Boolean> BESTFLASHLIGHT_ENERGY_ONLY =
-        ThreadLocal.withInitial(() -> false);
-
     @Redirect(
         method = "tick",
         at = @At(
@@ -24,32 +23,28 @@ abstract class CuriosCommonEventsMixin {
         ),
         require = 0
     )
-    private boolean bestflashlight$markEnergyOnlyCurioDiff(ItemStack current, ItemStack previous) {
-        BESTFLASHLIGHT_ENERGY_ONLY.set(
-            FlashlightEquipmentSync.isEnergyOnlyChange(current, previous)
-        );
-        return ItemStack.matches(current, previous);
-    }
-
-    @Redirect(
-        method = "syncCurios",
-        at = @At(
-            value = "INVOKE",
-            target = "Lnet/neoforged/neoforge/network/PacketDistributor;sendToPlayersTrackingEntityAndSelf(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/network/protocol/common/custom/CustomPacketPayload;[Lnet/minecraft/network/protocol/common/custom/CustomPacketPayload;)V"
-        ),
-        require = 0
-    )
-    private static void bestflashlight$routeEnergyOnlySyncToOwner(
-        Entity entity,
-        CustomPacketPayload payload,
-        CustomPacketPayload[] payloads
+    private boolean bestflashlight$syncEnergyWithoutCuriosStateChurn(
+        ItemStack current,
+        ItemStack previous,
+        EntityTickEvent.Post event
     ) {
-        boolean energyOnly = BESTFLASHLIGHT_ENERGY_ONLY.get();
-        BESTFLASHLIGHT_ENERGY_ONLY.set(false);
-        if (energyOnly && entity instanceof ServerPlayer player) {
-            PacketDistributor.sendToPlayer(player, payload, payloads);
-        } else {
-            PacketDistributor.sendToPlayersTrackingEntityAndSelf(entity, payload, payloads);
+        if (FlashlightEquipmentSync.isEnergyOnlyChange(current, previous)
+            && event.getEntity() instanceof ServerPlayer player
+            && player.connection.hasChannel(FlashlightNetwork.HeadbandEnergy.TYPE)) {
+            PacketDistributor.sendToPlayer(
+                player,
+                new FlashlightNetwork.HeadbandEnergy(LampEnergy.stored(current))
+            );
+
+            ItemStack currentLamp = LampData.mounted(current);
+            if (!currentLamp.isEmpty()) {
+                // Advance Curios' previous snapshot so this ENERGY-only change does not
+                // trigger a State event, modifier rebuild, or tracking SPacketSyncStack.
+                LampData.mount(previous, currentLamp);
+            }
+            return true;
         }
+
+        return ItemStack.matches(current, previous);
     }
 }
