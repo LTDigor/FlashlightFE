@@ -1,66 +1,86 @@
 package com.ltdigor.bestflashlight;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 /**
  * Negotiates whether vanilla temporary block lighting is still required.
  *
  * New clients report whether the optional LDL bridge is both compatible and enabled.
- * The server disables its expensive block-light beam only when every connected real
- * client supports that mode. Old clients and mixed sessions automatically keep fallback.
+ * Fallback is decided independently per dimension: an old/non-LDL player elsewhere
+ * must not force expensive temporary block lighting into an all-LDL dimension.
  */
 final class DynamicLightCoordination {
     private static final Set<UUID> ACTIVE_CLIENTS = new HashSet<>();
-    private static boolean fallbackEnabled = true;
+    private static final Map<ResourceKey<Level>, Boolean> FALLBACK_BY_DIMENSION = new HashMap<>();
 
     private DynamicLightCoordination() {}
 
     static void report(ServerPlayer player, boolean active) {
         if (active) ACTIVE_CLIENTS.add(player.getUUID());
         else ACTIVE_CLIENTS.remove(player.getUUID());
-        recompute(player.getServer());
+        recompute(player.serverLevel());
     }
 
     static void joined(ServerPlayer player) {
         ACTIVE_CLIENTS.remove(player.getUUID());
-        recompute(player.getServer());
+        recompute(player.serverLevel());
     }
 
     static void left(ServerPlayer player) {
         ACTIVE_CLIENTS.remove(player.getUUID());
-        recompute(player.getServer(), player.getUUID());
+        recompute(player.serverLevel(), player.getUUID());
+    }
+
+    static void changedDimension(ServerPlayer player, ResourceKey<Level> from, ResourceKey<Level> to) {
+        MinecraftServer server = player.getServer();
+        ServerLevel oldLevel = server.getLevel(from);
+        ServerLevel newLevel = server.getLevel(to);
+        if (oldLevel != null) recompute(oldLevel, player.getUUID());
+        if (newLevel != null) recompute(newLevel);
     }
 
     static boolean useServerFallback(ServerPlayer player) {
-        // Fake players and older clients never negotiate the optional capability.
         if (!player.connection.hasChannel(FlashlightNetwork.DynamicSupport.TYPE)) return true;
-        return fallbackEnabled;
+        return FALLBACK_BY_DIMENSION.getOrDefault(player.level().dimension(), true);
+    }
+
+    static void levelUnloaded(ResourceKey<Level> dimension) {
+        FALLBACK_BY_DIMENSION.remove(dimension);
     }
 
     static void reset() {
         ACTIVE_CLIENTS.clear();
-        fallbackEnabled = true;
+        FALLBACK_BY_DIMENSION.clear();
     }
 
-    private static void recompute(MinecraftServer server) {
-        recompute(server, null);
+    private static void recompute(ServerLevel level) {
+        recompute(level, null);
     }
 
-    private static void recompute(MinecraftServer server, UUID leaving) {
-        var players = server.getPlayerList().getPlayers().stream()
-            .filter(player -> leaving == null || !player.getUUID().equals(leaving))
+    private static void recompute(ServerLevel level, UUID excludedPlayer) {
+        var players = level.players().stream()
+            .filter(player -> excludedPlayer == null || !player.getUUID().equals(excludedPlayer))
             .toList();
-        boolean next = players.isEmpty() || players.stream().anyMatch(player ->
+
+        boolean nextFallback = players.isEmpty() || players.stream().anyMatch(player ->
             !player.connection.hasChannel(FlashlightNetwork.DynamicSupport.TYPE)
                 || !ACTIVE_CLIENTS.contains(player.getUUID()));
 
-        if (next == fallbackEnabled) return;
-        fallbackEnabled = next;
-        var packet = new FlashlightNetwork.FallbackMode(fallbackEnabled);
+        ResourceKey<Level> dimension = level.dimension();
+        boolean previous = FALLBACK_BY_DIMENSION.getOrDefault(dimension, true);
+        FALLBACK_BY_DIMENSION.put(dimension, nextFallback);
+        if (previous == nextFallback) return;
+
+        var packet = new FlashlightNetwork.FallbackMode(nextFallback);
         for (ServerPlayer player : players) {
             if (player.connection.hasChannel(FlashlightNetwork.FallbackMode.TYPE)) {
                 player.connection.send(packet);
