@@ -3,7 +3,8 @@
   "package": "com.ltdigor.bestflashlight.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "LivingEntityMixin"
+    "LivingEntityMixin",
+    "CuriosCommonEventsMixin"
   ],
   "injectors": {
     "defaultRequire": 1
