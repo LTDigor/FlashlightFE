@@ -27,6 +27,7 @@ import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -179,9 +180,13 @@ public final class FlashlightLightBlock extends Block implements BucketPickup, L
 
     static void rearmCleanup(ServerLevel level, BlockPos pos) {
         if (level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
-            // A loaded carrier with no in-memory owner is necessarily orphaned after
-            // restart. Check it on the next tick; active in-session ownership will
-            // simply reschedule the normal 100-tick watchdog from tick().
+            // Scheduled ticks are deduplicated by (type, pos), not by trigger time.
+            // Remove a persisted +100 watchdog before installing the prompt reload
+            // check; otherwise scheduleTick(..., 1) can be silently ignored.
+            level.getBlockTicks().clearArea(new BoundingBox(
+                pos.getX(), pos.getY(), pos.getZ(),
+                pos.getX(), pos.getY(), pos.getZ()
+            ));
             level.scheduleTick(pos, FlashlightMod.FLASHLIGHT_LIGHT.get(), 1);
         }
     }
