@@ -32,7 +32,7 @@ final class DynamicLightCoordination {
 
     static void left(ServerPlayer player) {
         ACTIVE_CLIENTS.remove(player.getUUID());
-        recompute(player.getServer());
+        recompute(player.getServer(), player.getUUID());
     }
 
     static boolean useServerFallback(ServerPlayer player) {
@@ -47,13 +47,16 @@ final class DynamicLightCoordination {
     }
 
     private static void recompute(MinecraftServer server) {
-        boolean next = true;
-        var players = server.getPlayerList().getPlayers();
-        if (!players.isEmpty()) {
-            next = players.stream().anyMatch(player ->
-                !player.connection.hasChannel(FlashlightNetwork.DynamicSupport.TYPE)
-                    || !ACTIVE_CLIENTS.contains(player.getUUID()));
-        }
+        recompute(server, null);
+    }
+
+    private static void recompute(MinecraftServer server, UUID leaving) {
+        var players = server.getPlayerList().getPlayers().stream()
+            .filter(player -> leaving == null || !player.getUUID().equals(leaving))
+            .toList();
+        boolean next = players.isEmpty() || players.stream().anyMatch(player ->
+            !player.connection.hasChannel(FlashlightNetwork.DynamicSupport.TYPE)
+                || !ACTIVE_CLIENTS.contains(player.getUUID()));
 
         if (next == fallbackEnabled) return;
         fallbackEnabled = next;
