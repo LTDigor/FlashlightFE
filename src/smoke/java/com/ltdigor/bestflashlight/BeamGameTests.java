@@ -368,6 +368,36 @@ public class BeamGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void dryCarrierReleaseRearmsNeighboringWater(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos waterPos = pos.west();
+        UUID owner = UUID.randomUUID();
+
+        level.setBlock(waterPos, Blocks.WATER.defaultBlockState(), 3);
+        level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+        acquire(level, pos, owner, 15);
+        helper.assertTrue(level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            "Dry illuminated cell must use the temporary carrier");
+
+        var waterType = level.getFluidState(waterPos).getType();
+        level.getFluidTicks().clearArea(new BoundingBox(
+            waterPos.getX(), waterPos.getY(), waterPos.getZ(),
+            waterPos.getX(), waterPos.getY(), waterPos.getZ()
+        ));
+        helper.assertTrue(!level.getFluidTicks().hasScheduledTick(waterPos, waterType),
+            "Fixture must begin with stable neighboring water");
+
+        release(level, pos, owner);
+
+        helper.assertTrue(level.getBlockState(pos).isAir(),
+            "Releasing a dry carrier must restore air");
+        helper.assertTrue(level.getFluidTicks().hasScheduledTick(waterPos, waterType),
+            "Restoring air beside stable water must re-arm neighboring fluid simulation");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void sourceWaterSurvivesLightLifecycle(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
