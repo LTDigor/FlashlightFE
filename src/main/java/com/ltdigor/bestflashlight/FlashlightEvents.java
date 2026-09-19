@@ -410,7 +410,7 @@ public final class FlashlightEvents {
         Map<BlockPos, Map<UUID, Integer>> dimensionLights = LIGHT_OWNERS.computeIfAbsent(dimension, ignored -> new HashMap<>());
         Map<UUID, Integer> owners = dimensionLights.computeIfAbsent(pos.immutable(), ignored -> new HashMap<>());
         owners.put(owner, Math.clamp(lightLevel, 1, 15));
-        int strongest = owners.values().stream().mapToInt(Integer::intValue).max().orElseThrow();
+        int strongest = strongest(owners);
         boolean replacingWater = current.is(Blocks.WATER);
         boolean waterlogged = replacingWater
             || (current.is(FlashlightMod.FLASHLIGHT_LIGHT.get()) && current.getValue(FlashlightLightBlock.WATERLOGGED));
@@ -443,10 +443,16 @@ public final class FlashlightEvents {
             forgetLight(dimension, pos);
             return;
         }
-        int strongest = owners.values().stream().mapToInt(Integer::intValue).max().orElseThrow();
+        int strongest = strongest(owners);
         if (current.getValue(FlashlightLightBlock.LEVEL) != strongest) {
             level.setBlock(pos, current.setValue(FlashlightLightBlock.LEVEL, strongest), FlashlightLightBlock.UPDATE_FLAGS);
         }
+    }
+
+    private static int strongest(Map<UUID, Integer> owners) {
+        int strongest = 0;
+        for (int value : owners.values()) strongest = Math.max(strongest, value);
+        return strongest;
     }
 
     public static boolean isTrackedLight(ResourceKey<Level> dimension, BlockPos pos) {
