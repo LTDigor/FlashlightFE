@@ -65,7 +65,6 @@ abstract class CuriosCommonEventsMixin {
                 player,
                 new FlashlightNetwork.HeadbandEnergy(
                     slotIndex,
-                    LampEnergy.stored(previous),
                     LampEnergy.stored(current)
                 )
             );
