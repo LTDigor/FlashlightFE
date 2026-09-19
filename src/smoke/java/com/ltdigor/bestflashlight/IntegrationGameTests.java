@@ -1,5 +1,6 @@
 package com.ltdigor.bestflashlight;
 
+import com.ltdigor.bestflashlight.mixin.AbstractContainerMenuAccessor;
 import blusunrize.immersiveengineering.common.blocks.metal.ChargingStationBlockEntity;
 import blusunrize.immersiveengineering.common.register.IEBlocks;
 import java.lang.reflect.Field;
@@ -68,6 +69,44 @@ public class IntegrationGameTests {
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
             helper.assertTrue(LampEnergy.stored(main) == 0 && !LampData.enabled(main), "Empty lamp disables without negative charge");
+        } finally { remove(helper, player); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void ownerSnapshotSuppressesOnlyPureEnergyDiffs(GameTestHelper helper) {
+        ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
+            new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "owner-sync"));
+        try {
+            player.setGameMode(GameType.SURVIVAL);
+            ItemStack lamp = lamp(20);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+            player.inventoryMenu.sendAllDataToRemote();
+
+            int slotIndex = -1;
+            for (int i = 0; i < player.inventoryMenu.slots.size(); i++) {
+                if (player.inventoryMenu.slots.get(i).getItem() == lamp) {
+                    slotIndex = i;
+                    break;
+                }
+            }
+            helper.assertTrue(slotIndex >= 0, "Main-hand flashlight must appear in the inventory menu");
+
+            var remote = ((AbstractContainerMenuAccessor) player.inventoryMenu).bestflashlight$getRemoteSlots();
+            helper.assertTrue(LampEnergy.stored(remote.get(slotIndex)) == 20 && !LampData.enabled(remote.get(slotIndex)),
+                "Fixture remote snapshot must start disabled with full test charge");
+
+            LampData.setEnabled(lamp, true);
+            lamp.set(LampData.ENERGY.get(), 19);
+            FlashlightOwnerSync.advanceOnlyEnergy(player.inventoryMenu, lamp);
+            helper.assertTrue(LampEnergy.stored(remote.get(slotIndex)) == 20 && !LampData.enabled(remote.get(slotIndex)),
+                "ENERGY optimization must not swallow a simultaneous enabled-state change");
+
+            player.inventoryMenu.sendAllDataToRemote();
+            lamp.set(LampData.ENERGY.get(), 18);
+            FlashlightOwnerSync.advanceOnlyEnergy(player.inventoryMenu, lamp);
+            helper.assertTrue(LampEnergy.stored(remote.get(slotIndex)) == 18 && LampData.enabled(remote.get(slotIndex)),
+                "A pure ENERGY diff must advance the remote menu snapshot");
         } finally { remove(helper, player); }
         helper.succeed();
     }
