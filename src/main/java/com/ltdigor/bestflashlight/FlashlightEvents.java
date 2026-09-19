@@ -5,7 +5,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -33,7 +33,8 @@ public final class FlashlightEvents {
     private static final Map<ResourceKey<Level>, Map<BlockPos, Map<UUID, Integer>>> LIGHT_OWNERS = new HashMap<>();
     private static final Map<UUID, PlayerBeam> PLAYER_BEAMS = new HashMap<>();
     private static final Map<UUID, BeamCache> BEAM_CACHE = new HashMap<>();
-    private static final Map<ResourceKey<Level>, Set<BlockPos>> PENDING_CLEANUP_REARM = new ConcurrentHashMap<>();
+    private static final ConcurrentLinkedQueue<CleanupRearm> PENDING_CLEANUP_REARM =
+        new ConcurrentLinkedQueue<>();
 
     // Integer points inside a radius-three disk give 29 directions, including the
     // axis and cone edges. This keeps fallback quality while cutting server ray work
@@ -498,29 +499,23 @@ public final class FlashlightEvents {
 
     private static void onChunkLoad(ChunkEvent.Load event) {
         if (!(event.getLevel() instanceof ServerLevel level) || event.isNewChunk()) return;
-        Set<BlockPos> pending = PENDING_CLEANUP_REARM.computeIfAbsent(
-            level.dimension(), ignored -> ConcurrentHashMap.newKeySet());
         event.getChunk().findBlocks(
             state -> state.is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
-            (pos, state) -> pending.add(pos.immutable())
+            (pos, state) -> PENDING_CLEANUP_REARM.add(
+                new CleanupRearm(level.dimension(), pos.immutable()))
         );
     }
 
     private static void onServerTick(ServerTickEvent.Pre event) {
         if (PENDING_CLEANUP_REARM.isEmpty()) return;
         MinecraftServer server = event.getServer();
-        var pendingByDimension = new HashMap<ResourceKey<Level>, Set<BlockPos>>();
-        PENDING_CLEANUP_REARM.forEach((dimension, positions) -> {
-            Set<BlockPos> removed = PENDING_CLEANUP_REARM.remove(dimension);
-            if (removed != null && !removed.isEmpty()) pendingByDimension.put(dimension, removed);
-        });
-        pendingByDimension.forEach((dimension, positions) -> {
-            ServerLevel level = server.getLevel(dimension);
-            if (level == null) return;
-            for (BlockPos pos : positions) {
-                if (loaded(level, pos)) FlashlightLightBlock.rearmCleanup(level, pos);
+        CleanupRearm pending;
+        while ((pending = PENDING_CLEANUP_REARM.poll()) != null) {
+            ServerLevel level = server.getLevel(pending.dimension());
+            if (level != null && loaded(level, pending.pos())) {
+                FlashlightLightBlock.rearmCleanup(level, pending.pos());
             }
-        });
+        }
     }
 
     private static void onLevelUnload(LevelEvent.Unload event) {
@@ -528,7 +523,7 @@ public final class FlashlightEvents {
             LIGHT_OWNERS.remove(level.dimension());
             PLAYER_BEAMS.values().removeIf(beam -> beam.dimension().equals(level.dimension()));
             BEAM_CACHE.values().removeIf(cache -> cache.dimension().equals(level.dimension()));
-            PENDING_CLEANUP_REARM.remove(level.dimension());
+            PENDING_CLEANUP_REARM.removeIf(pending -> pending.dimension().equals(level.dimension()));
             DynamicLightCoordination.levelUnloaded(level.dimension());
         }
     }
@@ -542,6 +537,7 @@ public final class FlashlightEvents {
         LampSource.clearLegacyChecks();
     }
 
+    private record CleanupRearm(ResourceKey<Level> dimension, BlockPos pos) {}
     private record PlayerBeam(ResourceKey<Level> dimension, Set<BlockPos> positions) {}
     private record BeamCache(ResourceKey<Level> dimension, Vec3 eye, Vec3 emitter, Vec3 look,
                              boolean headMounted, boolean offHand, double range,
