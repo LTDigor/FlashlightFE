@@ -13,7 +13,8 @@ abstract class LivingEntityMixin {
     @Inject(method = "equipmentHasChanged", at = @At("HEAD"), cancellable = true)
     private void bestflashlight$ignoreEnergyOnlyEquipmentDiff(ItemStack before, ItemStack after,
                                                                CallbackInfoReturnable<Boolean> cir) {
-        if (FlashlightEquipmentSync.isEnergyOnlyChange(before, after)) {
+        LivingEntity self = (LivingEntity) (Object) this;
+        if (!self.level().isClientSide && FlashlightEquipmentSync.isEnergyOnlyChange(before, after)) {
             cir.setReturnValue(false);
         }
     }
