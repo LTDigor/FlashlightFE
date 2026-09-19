@@ -13,11 +13,37 @@ final class FlashlightBeamMath {
 
     static Vec3 smooth(Vec3 previous, Vec3 target, double factor) {
         if (target == null || target.lengthSqr() < 1.0E-12) return previous;
-        Vec3 normalized = target.normalize();
-        if (previous == null || previous.lengthSqr() < 1.0E-12) return normalized;
+        Vec3 to = target.normalize();
+        if (previous == null || previous.lengthSqr() < 1.0E-12) return to;
+
+        Vec3 from = previous.normalize();
         double t = Math.clamp(factor, 0.0, 1.0);
-        Vec3 blended = previous.normalize().scale(1.0 - t).add(normalized.scale(t));
-        return blended.lengthSqr() < 1.0E-12 ? normalized : blended.normalize();
+        if (t <= 0.0) return from;
+        if (t >= 1.0) return to;
+
+        double dot = Math.clamp(from.dot(to), -1.0, 1.0);
+        if (dot > 0.9995) {
+            Vec3 blended = from.scale(1.0 - t).add(to.scale(t));
+            return blended.lengthSqr() < 1.0E-12 ? to : blended.normalize();
+        }
+
+        if (dot < -0.9995) {
+            // Antipodal vectors have no unique shortest arc. Pick a stable
+            // perpendicular direction instead of nlerp collapsing back onto
+            // the old direction forever when t < 0.5.
+            Vec3 reference = Math.abs(from.y) < 0.9
+                ? new Vec3(0.0, 1.0, 0.0)
+                : new Vec3(1.0, 0.0, 0.0);
+            Vec3 perpendicular = from.cross(reference).normalize();
+            double angle = Math.PI * t;
+            return from.scale(Math.cos(angle)).add(perpendicular.scale(Math.sin(angle))).normalize();
+        }
+
+        double angle = Math.acos(dot);
+        double sinAngle = Math.sin(angle);
+        double fromWeight = Math.sin((1.0 - t) * angle) / sinAngle;
+        double toWeight = Math.sin(t * angle) / sinAngle;
+        return from.scale(fromWeight).add(to.scale(toWeight)).normalize();
     }
 
     /**
