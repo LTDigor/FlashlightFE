@@ -13,6 +13,7 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -356,8 +357,7 @@ public final class FlashlightEvents {
     }
 
     private static boolean acceptsLight(BlockState state) {
-        return state.isAir() || state.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
-            || (state.is(Blocks.WATER) && state.getFluidState().isSource());
+        return state.isAir() || state.is(FlashlightMod.FLASHLIGHT_LIGHT.get()) || state.is(Blocks.WATER);
     }
 
     private static void acquireLight(ServerLevel level, ResourceKey<Level> dimension, BlockPos pos, UUID owner, int lightLevel) {
@@ -373,8 +373,15 @@ public final class FlashlightEvents {
         int strongest = owners.values().stream().mapToInt(Integer::intValue).max().orElseThrow();
         boolean waterlogged = current.is(Blocks.WATER)
             || (current.is(FlashlightMod.FLASHLIGHT_LIGHT.get()) && current.getValue(FlashlightLightBlock.WATERLOGGED));
+        int waterLevel = current.is(Blocks.WATER)
+            ? current.getValue(LiquidBlock.LEVEL)
+            : current.is(FlashlightMod.FLASHLIGHT_LIGHT.get())
+                ? current.getValue(FlashlightLightBlock.WATER_LEVEL)
+                : 0;
         BlockState desired = FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState()
-            .setValue(FlashlightLightBlock.LEVEL, strongest).setValue(FlashlightLightBlock.WATERLOGGED, waterlogged);
+            .setValue(FlashlightLightBlock.LEVEL, strongest)
+            .setValue(FlashlightLightBlock.WATERLOGGED, waterlogged)
+            .setValue(FlashlightLightBlock.WATER_LEVEL, waterLevel);
         if (current != desired) level.setBlock(pos, desired, FlashlightLightBlock.UPDATE_FLAGS);
     }
 
