@@ -87,6 +87,16 @@ class FlashlightBeamMathTest {
         assertTrue(FlashlightBeamMath.visibleAtSample(behind, 1.00, 2.00, FlashlightBeamMath.NO_HIT_BLOCK));
     }
 
+    @Test void offRayPointBeforeWallUsesProjectedOcclusionDepth() {
+        BlockPos target = new BlockPos(1, 1, 0);
+        assertTrue(FlashlightBeamMath.visibleAtSample(
+            target, 0.95, 1.0, FlashlightBeamMath.NO_HIT_BLOCK),
+            "A point laterally offset from a sample ray must stay visible when its projected depth is before the hit");
+        assertFalse(FlashlightBeamMath.visibleAtSample(
+            target, 1.05, 1.0, FlashlightBeamMath.NO_HIT_BLOCK),
+            "A point projected behind the sampled collision must be occluded");
+    }
+
     @Test void coneSamplesReachConfiguredEdges() {
         double diagonal = Math.sqrt(0.5);
         double[] x = {0.0, 1.0, -1.0, 0.0, 0.0, diagonal, -diagonal, diagonal, -diagonal};
