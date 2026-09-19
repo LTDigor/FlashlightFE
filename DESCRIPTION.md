@@ -42,7 +42,7 @@ Install on **both client and server**:
 - NeoForge **21.1.249 or newer within 21.1**
 - Curios **9.5.1 or newer within version 9**
 
-JEI **19.18+ within version 19** is optional. LambDynamicLights is also optional; when present, the local flashlight uses its smoother client-side directional cone while the normal server light remains the compatibility fallback. An FE item charger from another mod is useful for survival play. GeckoLib and a separate dynamic-lighting mod are not required.
+JEI **19.18+ within version 19** is optional. LambDynamicLights is also optional. When every player in a dimension has a compatible, enabled bridge, the server skips temporary block-light beams there and clients render directional flashlight cones for all visible players. Mixed or older clients automatically retain the normal server fallback. An FE item charger from another mod is useful for survival play. GeckoLib is not required.
 
 **MIT license. Author: LTDigor.** Source and issue tracker: https://github.com/LTDigor/FlashlightFE
 
