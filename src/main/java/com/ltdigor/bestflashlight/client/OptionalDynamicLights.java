@@ -1,6 +1,7 @@
 package com.ltdigor.bestflashlight.client;
 
 import com.ltdigor.bestflashlight.FlashlightConfig;
+import com.ltdigor.bestflashlight.LampEnergy;
 import com.ltdigor.bestflashlight.LampSource;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
@@ -61,7 +62,7 @@ final class OptionalDynamicLights {
         if (!available || !added) return;
         Minecraft client = Minecraft.getInstance();
         if (client.level == null || client.player == null || !client.player.isAlive() || client.player.isSpectator()
-            || LampSource.select(client.player) == null || client.level != activeLevel) {
+            || !hasActivePoweredSource(client) || client.level != activeLevel) {
             deactivate();
         }
     }
@@ -78,7 +79,7 @@ final class OptionalDynamicLights {
         }
 
         LampSource source = LampSource.select(client.player);
-        if (source == null) {
+        if (source == null || !LampEnergy.hasPower(source.stack(), client.player)) {
             deactivate();
             return;
         }
@@ -156,6 +157,11 @@ final class OptionalDynamicLights {
                 disable();
             }
         }
+    }
+
+    private static boolean hasActivePoweredSource(Minecraft client) {
+        LampSource source = LampSource.select(client.player);
+        return source != null && LampEnergy.hasPower(source.stack(), client.player);
     }
 
     private static Vec3 emitterOrigin(Player player, LampSource source, Vec3 look) {
