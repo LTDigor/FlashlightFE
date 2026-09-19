@@ -171,8 +171,13 @@ final class OptionalDynamicLights {
 
     private static Vec3 emitterOrigin(Player player, LampSource source, Vec3 look, Vec3 eye) {
         if (source.headMounted()) return eye.add(look.scale(0.45)).add(0.0, 0.15, 0.0);
-        double yaw = Math.toRadians(player.getYRot());
-        Vec3 right = new Vec3(-Math.cos(yaw), 0.0, -Math.sin(yaw));
+        Vec3 right = new Vec3(-look.z, 0.0, look.x);
+        if (right.lengthSqr() < 1.0E-12) {
+            double yaw = Math.toRadians(player.getYRot());
+            right = new Vec3(-Math.cos(yaw), 0.0, -Math.sin(yaw));
+        } else {
+            right = right.normalize();
+        }
         boolean rightHand = (player.getMainArm() == HumanoidArm.RIGHT) != source.offHand();
         return eye.add(look.scale(0.55)).add(right.scale(rightHand ? 0.35 : -0.35)).add(0.0, -0.45, 0.0);
     }
