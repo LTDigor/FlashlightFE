@@ -45,6 +45,7 @@ public final class FlashlightEvents {
 
     public static void register() {
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerTick);
+        NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerLoggedOut);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerChangedDimension);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onLivingDeath);
@@ -75,6 +76,15 @@ public final class FlashlightEvents {
             return;
         }
         Vec3 emitter = emitterOrigin(player, source, look);
+
+        // In an all-LDL session every client renders every tracked player's cone.
+        // Keep FE and source validation authoritative on the server, but skip the
+        // expensive 49-ray temporary block-light beam entirely.
+        if (!DynamicLightCoordination.useServerFallback(player)) {
+            clearPlayer(player);
+            LampEnergy.consume(source.stack(), player);
+            return;
+        }
 
         // A hand/head model may geometrically overlap a nearby wall. That must not turn
         // the lamp off: start tracing from the eyes and let each beam ray stop at the wall.
@@ -411,8 +421,16 @@ public final class FlashlightEvents {
         for (BlockPos pos : previous.positions()) releaseLight(level, previous.dimension(), pos, player.getUUID());
     }
 
+    public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) DynamicLightCoordination.joined(player);
+    }
+
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) clearPlayer(player);
+        if (event.getEntity() instanceof ServerPlayer player) {
+            clearPlayer(player);
+            DynamicLightCoordination.left(player);
+            LampSource.resetLegacyCheck(player.getUUID());
+        }
     }
 
     public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
@@ -433,6 +451,8 @@ public final class FlashlightEvents {
     private static void onServerStopped(ServerStoppedEvent event) {
         LIGHT_OWNERS.clear();
         PLAYER_BEAMS.clear();
+        DynamicLightCoordination.reset();
+        LampSource.clearLegacyChecks();
     }
 
     private record PlayerBeam(ResourceKey<Level> dimension, Set<BlockPos> positions) {}
