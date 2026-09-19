@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.FluidTags;
@@ -20,15 +21,18 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /** Server-owned temporary illumination. All state is confined to the server thread. */
 public final class FlashlightEvents {
     private static final Map<ResourceKey<Level>, Map<BlockPos, Map<UUID, Integer>>> LIGHT_OWNERS = new HashMap<>();
     private static final Map<UUID, PlayerBeam> PLAYER_BEAMS = new HashMap<>();
     private static final Map<UUID, BeamCache> BEAM_CACHE = new HashMap<>();
+    private static final Map<ResourceKey<Level>, Set<BlockPos>> PENDING_CLEANUP_REARM = new HashMap<>();
 
     // Integer points inside a radius-three disk give 29 directions, including the
     // axis and cone edges. This keeps fallback quality while cutting server ray work
@@ -55,6 +59,8 @@ public final class FlashlightEvents {
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerLoggedOut);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onPlayerChangedDimension);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onLivingDeath);
+        NeoForge.EVENT_BUS.addListener(FlashlightEvents::onChunkLoad);
+        NeoForge.EVENT_BUS.addListener(FlashlightEvents::onServerTick);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onLevelUnload);
         NeoForge.EVENT_BUS.addListener(FlashlightEvents::onServerStopped);
     }
@@ -477,11 +483,35 @@ public final class FlashlightEvents {
         if (event.getEntity() instanceof ServerPlayer player) clearPlayer(player);
     }
 
+    private static void onChunkLoad(ChunkEvent.Load event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || event.isNewChunk()) return;
+        Set<BlockPos> pending = PENDING_CLEANUP_REARM.computeIfAbsent(level.dimension(), ignored -> new HashSet<>());
+        event.getChunk().findBlocks(
+            state -> state.is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+            (pos, state) -> pending.add(pos.immutable())
+        );
+    }
+
+    private static void onServerTick(ServerTickEvent.Pre event) {
+        if (PENDING_CLEANUP_REARM.isEmpty()) return;
+        MinecraftServer server = event.getServer();
+        var pendingByDimension = new HashMap<>(PENDING_CLEANUP_REARM);
+        PENDING_CLEANUP_REARM.clear();
+        pendingByDimension.forEach((dimension, positions) -> {
+            ServerLevel level = server.getLevel(dimension);
+            if (level == null) return;
+            for (BlockPos pos : positions) {
+                if (loaded(level, pos)) FlashlightLightBlock.rearmCleanup(level, pos);
+            }
+        });
+    }
+
     private static void onLevelUnload(LevelEvent.Unload event) {
         if (event.getLevel() instanceof ServerLevel level) {
             LIGHT_OWNERS.remove(level.dimension());
             PLAYER_BEAMS.values().removeIf(beam -> beam.dimension().equals(level.dimension()));
             BEAM_CACHE.values().removeIf(cache -> cache.dimension().equals(level.dimension()));
+            PENDING_CLEANUP_REARM.remove(level.dimension());
             DynamicLightCoordination.levelUnloaded(level.dimension());
         }
     }
@@ -490,6 +520,7 @@ public final class FlashlightEvents {
         LIGHT_OWNERS.clear();
         PLAYER_BEAMS.clear();
         BEAM_CACHE.clear();
+        PENDING_CLEANUP_REARM.clear();
         DynamicLightCoordination.reset();
         LampSource.clearLegacyChecks();
     }
