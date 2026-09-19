@@ -82,7 +82,14 @@ final class DynamicLightCoordination {
         if (newLevel != null) {
             forceFallbackForTopologyChange(newLevel);
             recompute(newLevel);
+            sendCurrentMode(player, to);
         }
+    }
+
+    private static void sendCurrentMode(ServerPlayer player, ResourceKey<Level> dimension) {
+        if (!player.connection.hasChannel(FlashlightNetwork.FallbackMode.TYPE)) return;
+        boolean fallback = FALLBACK_BY_DIMENSION.getOrDefault(dimension, true);
+        player.connection.send(new FlashlightNetwork.FallbackMode(fallback));
     }
 
     static boolean useServerFallback(ServerPlayer player) {
