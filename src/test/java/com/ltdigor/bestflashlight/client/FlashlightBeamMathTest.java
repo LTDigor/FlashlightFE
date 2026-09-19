@@ -1,5 +1,6 @@
 package com.ltdigor.bestflashlight.client;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
@@ -24,27 +25,57 @@ class FlashlightBeamMathTest {
         assertEquals(target, FlashlightBeamMath.smooth(previous, target, 1.0));
     }
 
-    @Test void closeWallNeverPushesBeamThroughWallOrBehindCamera() {
-        Vec3 start = new Vec3(10, 20, 30);
-        Vec3 direction = new Vec3(0, 0, 1);
-        Vec3 normal = FlashlightBeamMath.wallEnd(start, direction, 0.40, 0.06);
-        assertEquals(0.34, normal.distanceTo(start), EPS);
-        Vec3 touching = FlashlightBeamMath.wallEnd(start, direction, 0.02, 0.06);
-        assertEquals(start, touching);
+    @Test void smoothingIsFrameRateIndependent() {
+        double at60 = FlashlightBeamMath.frameIndependentFactor(0.38, 1.0 / 60.0, 60.0);
+        double at120 = FlashlightBeamMath.frameIndependentFactor(0.38, 1.0 / 120.0, 60.0);
+        assertEquals(0.38, at60, EPS);
+        assertEquals(at60, 1.0 - Math.pow(1.0 - at120, 2.0), EPS);
     }
 
-    @Test void coneCenterIsAxisAndOffsetsRemainNormalized() {
+    @Test void coneHasBrightCoreSoftEdgeAndNoBackwardsLight() {
+        Vec3 origin = Vec3.ZERO;
         Vec3 axis = new Vec3(0, 0, 1);
-        Vec3 right = new Vec3(1, 0, 0);
-        Vec3 up = new Vec3(0, 1, 0);
-        assertEquals(axis, FlashlightBeamMath.coneDirection(axis, right, up, 0, 0));
-        Vec3 edge = FlashlightBeamMath.coneDirection(axis, right, up, Math.toRadians(7.5), 0);
-        assertEquals(1.0, edge.length(), EPS);
-        assertTrue(edge.x > 0 && edge.z > 0);
+        double halfAngle = Math.toRadians(7.5);
+
+        double core = FlashlightBeamMath.coneLuminance(origin, axis, new Vec3(0, 0, 4), 12, halfAngle);
+        double edge = FlashlightBeamMath.coneLuminance(origin, axis, new Vec3(0.45, 0, 4), 12, halfAngle);
+        double outside = FlashlightBeamMath.coneLuminance(origin, axis, new Vec3(1.0, 0, 4), 12, halfAngle);
+        double behind = FlashlightBeamMath.coneLuminance(origin, axis, new Vec3(0, 0, -1), 12, halfAngle);
+
+        assertTrue(core > edge);
+        assertTrue(edge > 0.0);
+        assertEquals(0.0, outside, EPS);
+        assertEquals(0.0, behind, EPS);
+    }
+
+    @Test void closeWallStillReceivesLightAtBlockCentre() {
+        Vec3 origin = new Vec3(0.9, 1.62, 0.5);
+        Vec3 point = new Vec3(1.5, 1.5, 0.5);
+        double light = FlashlightBeamMath.coneLuminance(origin, new Vec3(1, 0, 0), point, 12, Math.toRadians(7.5));
+        assertTrue(light > 10.0);
+    }
+
+    @Test void hitBlockIsVisibleButBlocksBehindHitAreNot() {
+        BlockPos wall = new BlockPos(1, 1, 0);
+        BlockPos behind = new BlockPos(2, 1, 0);
+        long wallKey = wall.asLong();
+
+        assertTrue(FlashlightBeamMath.visibleAtSample(wall, 0.65, 0.10, wallKey));
+        assertFalse(FlashlightBeamMath.visibleAtSample(behind, 1.65, 0.10, wallKey));
+        assertTrue(FlashlightBeamMath.visibleAtSample(behind, 1.00, 2.00, FlashlightBeamMath.NO_HIT_BLOCK));
+    }
+
+    @Test void coneSamplesReachConfiguredEdges() {
+        double diagonal = Math.sqrt(0.5);
+        double[] x = {0.0, 1.0, -1.0, 0.0, 0.0, diagonal, -diagonal, diagonal, -diagonal};
+        double[] y = {0.0, 0.0, 0.0, 1.0, -1.0, diagonal, diagonal, -diagonal, -diagonal};
+
+        assertEquals(1, FlashlightBeamMath.nearestConeSample(0.95, 0.05, x, y));
+        assertEquals(5, FlashlightBeamMath.nearestConeSample(0.70, 0.70, x, y));
+        assertEquals(0, FlashlightBeamMath.nearestConeSample(0.05, -0.05, x, y));
     }
 
     @Test void configuredFullAngleConvertsToHalfAngle() {
-        assertEquals(Math.toRadians(7.5), FlashlightBeamMath.coneOffsetRadians(15.0, 1.0), EPS);
-        assertEquals(-Math.toRadians(7.5), FlashlightBeamMath.coneOffsetRadians(15.0, -1.0), EPS);
+        assertEquals(Math.toRadians(7.5), FlashlightBeamMath.halfAngleRadians(15.0), EPS);
     }
 }
