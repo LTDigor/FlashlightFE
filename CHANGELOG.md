@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.4
+
+- Redesign the handheld flashlight with an octagonal graphite body, ribbed grip, steel bezel, recessed optic, pocket clip and orange mechanical switch.
+- Redesign the headband with a woven strap, side hinges, compact central lamp and rear battery housing. Empty and mounted forms remain distinct.
+- Share the same baked headband geometry between inventory and Curios rendering; resolve models from the current resource manager after reloads.
+- Add original pixel-art atlases and lens-only full-bright faces for enabled lamps, including the headband inventory model. No new runtime dependencies.
+- Preserve handheld button animation, mounting recipes, FE behavior, networking and both lighting backends. Adjust item display transforms without changing beam calculations.
+- Add reproducible model authoring and offline regression checks for geometry, texture references, state overrides, button travel and resource consistency.
+
 ## 1.0.3
 
 - Add optional LambDynamicLights integration with directional cones for all visible players; a two-phase per-dimension handoff removes the vanilla server-light fallback only after every compatible client reports its dynamic renderer ready, while mixed/older clients keep fallback automatically.

@@ -49,6 +49,8 @@ public final class FlashlightClientEvents {
                 (stack, level, entity, seed) -> LampData.enabled(stack) ? 1 : 0);
             ItemProperties.register(FlashlightMod.HEADBAND.get(), FlashlightMod.resource("mounted"),
                 (stack, level, entity, seed) -> LampData.mounted(stack).isEmpty() ? 0 : 1);
+            ItemProperties.register(FlashlightMod.HEADBAND.get(), FlashlightMod.resource("enabled"),
+                (stack, level, entity, seed) -> LampData.enabled(stack) ? 1 : 0);
             CuriosRendererRegistry.register(FlashlightMod.HEADBAND.get(), HeadbandRenderer::new);
         });
         NeoForge.EVENT_BUS.addListener(FlashlightClientEvents::tick);
