@@ -4,6 +4,8 @@
 
 A Minecraft **1.21.1 / NeoForge** flashlight mod by **LTDigor**. Rechargeable handheld lights, hands-free Curios use and reversible headband mounting.
 
+[Download on CurseForge](https://www.curseforge.com/minecraft/mc-mods/flashlight-fe) · [GitHub releases](https://github.com/LTDigor/FlashlightFE/releases) · [Report an issue](https://github.com/LTDigor/FlashlightFE/issues)
+
 ## Install
 
 Install `flashlight-fe-1.0.4.jar` on both client and server, with NeoForge **21.1.249+** within 21.1 and Curios **9.5.1+** within version 9. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
