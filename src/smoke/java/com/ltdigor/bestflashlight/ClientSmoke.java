@@ -5,6 +5,7 @@ import com.mojang.logging.LogUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.CameraType;
@@ -14,6 +15,8 @@ import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.resources.model.ModelResourceLocation;
+import net.minecraft.client.tutorial.TutorialSteps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.Difficulty;
@@ -47,6 +50,8 @@ public final class ClientSmoke {
     private static boolean opened, prepared;
     private static int ticks;
     private static java.util.concurrent.CompletableFuture<Void> pending;
+    private static CompletableFuture<Void> resourceReload;
+    private static long resourceReloadDeadlineNanos;
     private static void serverStep(Minecraft mc, Runnable action) { pending = mc.getSingleplayerServer().submit(action); }
     private static final boolean RELOAD = Boolean.getBoolean("bestflashlight.smoke.reload");
     private static final BlockPos WATER_ORPHAN = new BlockPos(-5, -59, -6);
@@ -109,11 +114,24 @@ public final class ClientSmoke {
             pending.join();
             pending = null;
         }
+        if (resourceReload != null) {
+            if (!resourceReload.isDone()) {
+                if (System.nanoTime() > resourceReloadDeadlineNanos)
+                    throw new AssertionError("Timed out waiting 60 seconds for Minecraft resource-pack reload");
+                return;
+            }
+            resourceReload.join();
+            resourceReload = null;
+            resourceReloadDeadlineNanos = 0;
+            assertRenderers(mc);
+            LogUtils.getLogger().info("FLASHLIGHT_RESOURCE_RELOAD_SMOKE_PASS: native item and Curios renderers reloaded");
+        }
         if(!opened && mc.screen instanceof TitleScreen && mc.getOverlay()==null) {
             opened=true;
-            if(CuriosRendererRegistry.getRenderer(FlashlightMod.HEADBAND.get()).isEmpty()) throw new AssertionError("Missing headband renderer");
-            if(mc.getItemRenderer().getModel(new ItemStack(FlashlightMod.HEADBAND.get()),null,null,0)==mc.getModelManager().getMissingModel()) throw new AssertionError("Missing headband item model");
-            mc.options.renderDistance().set(4); mc.options.simulationDistance().set(5); mc.options.pauseOnLostFocus=false;
+            assertRenderers(mc);
+            mc.options.renderDistance().set(4); mc.options.simulationDistance().set(5); mc.options.pauseOnLostFocus=false; mc.options.hideGui=true;
+            mc.getTutorial().setStep(TutorialSteps.NONE);
+            mc.getToasts().clear();
             if (RELOAD) {
                 readMarker(mc);
                 mc.createWorldOpenFlows().openWorld(worldName, () -> { throw new AssertionError("World reload cancelled"); });
@@ -201,6 +219,16 @@ public final class ClientSmoke {
         if(ticks==140) shot(mc,"headband-with-helmet.png");
         if(ticks==160) serverStep(mc, () -> mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()).setItemSlot(EquipmentSlot.HEAD,ItemStack.EMPTY));
         if(ticks==200) shot(mc,"headband-forehead.png");
+        if(ticks==205) {
+            resourceReload = mc.reloadResourcePacks();
+            resourceReloadDeadlineNanos = System.nanoTime() + 60_000_000_000L;
+            return;
+        }
+        if(ticks==210) { mc.options.keyShift.setDown(true); mc.player.setYRot(45); mc.player.setYHeadRot(45); }
+        if(ticks==215) {
+            if (!mc.player.isCrouching()) throw new AssertionError("Client sneak key did not produce a crouching capture pose");
+            shot(mc,"headband-sneaking-turned.png"); mc.options.keyShift.setDown(false); mc.player.setYRot(0); mc.player.setYHeadRot(0);
+        }
         if(ticks==220) { mc.options.setCameraType(CameraType.FIRST_PERSON); mc.options.fov().set(70); }
         if(ticks==250) shot(mc,"beam-12-blocks-15-degrees.png");
         if(ticks==270) {
@@ -314,6 +342,10 @@ public final class ClientSmoke {
             });
         }
         if(ticks==455) postKey(GLFW.GLFW_KEY_K, GLFW.GLFW_PRESS);
+        if(ticks==460) {
+            mc.options.setCameraType(CameraType.FIRST_PERSON); mc.options.fov().set(70); mc.options.hideGui = false;
+        }
+        if(ticks==462) shot(mc, "offhand-flashlight-left-arm.png");
         if(ticks==470) {
             if (!LampData.enabled(mc.player.getOffhandItem()) || LampEnergy.stored(mc.player.getOffhandItem()) != 1000)
                 throw new AssertionError("Rebound handheld key did not fall back to offhand with occupied main hand: main="
@@ -382,7 +414,21 @@ public final class ClientSmoke {
         }
     }
     private static void shot(Minecraft mc,String name) {
+        mc.getTutorial().setStep(TutorialSteps.NONE);
+        mc.getToasts().clear();
         Screenshot.grab(mc.gameDirectory,name,mc.getMainRenderTarget(),message -> LogUtils.getLogger().info("Screenshot: {}",message.getString()));
+    }
+    private static void assertRenderers(Minecraft mc) {
+        if(CuriosRendererRegistry.getRenderer(FlashlightMod.HEADBAND.get()).isEmpty()) throw new AssertionError("Missing headband renderer");
+        if(mc.getItemRenderer().getModel(new ItemStack(FlashlightMod.HEADBAND.get()),null,null,0)==mc.getModelManager().getMissingModel())
+            throw new AssertionError("Missing headband item model");
+        assertModel(mc, ModelResourceLocation.inventory(FlashlightMod.resource("flashlight")), "flashlight inventory");
+        for (String name : new String[] {"flashlight_button", "headband_empty", "headband_loaded", "headband_loaded_on"})
+            assertModel(mc, ModelResourceLocation.standalone(FlashlightMod.resource("item/" + name)), name);
+    }
+    private static void assertModel(Minecraft mc, ModelResourceLocation id, String name) {
+        if (mc.getModelManager().getModel(id) == mc.getModelManager().getMissingModel())
+            throw new AssertionError("Missing baked model: " + name);
     }
     private static void postKey(int key, int action) {
         NeoForge.EVENT_BUS.post(new InputEvent.Key(key, 0, action, 0));

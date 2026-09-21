@@ -54,3 +54,18 @@ Repository GameTests remain the regression gate for FE, mounting and light
 behavior; the existing client smoke harness covers rendering/input paths. Do not
 report manual visual checks as passed merely because asset tests or compilation
 succeed.
+
+### Recorded vanilla client smoke
+
+`runClientSmoke` now starts with first-run accessibility onboarding disabled in
+its isolated run directory, then uses the actual client to create a disposable
+creative world. The recorded run covered loaded/on headband rendering with a
+helmet and without it, a sneaking 45-degree head rotation, first- and
+third-person native button movement, left-hand flashlight placement, and the
+existing real input assertions. It also invoked `Minecraft.reloadResourcePacks()`
+and re-checked the native item and Curios renderer registrations after completion.
+
+The captures are evidence for those vanilla states only. Empty/off headband,
+slim-arm skin, GUI, item-frame, dropped-item, manual F3+T, and shader-preset
+appearance remain deferred visual checks. The checked-in gallery images and GIF
+come directly from that client-smoke run; they are not generated previews.

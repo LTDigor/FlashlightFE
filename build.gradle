@@ -42,6 +42,19 @@ neoForge {
     unitTest { enable(); testedMod = mods.bestflashlight }
 }
 tasks.named('test', Test) { useJUnitPlatform() }
+
+// This run directory is disposable. Skip first-run accessibility onboarding so smoke can reach TitleScreen.
+['runClientSmoke', 'runClientReloadSmoke'].each { taskName ->
+    tasks.named(taskName) {
+        doFirst {
+            def options = file('run-client-smoke/options.txt')
+            def keys = ['onboardAccessibility:', 'pauseOnLostFocus:']
+            def existing = options.exists() ? options.readLines().findAll { line -> !keys.any { line.startsWith(it) } } : []
+            options.parentFile.mkdirs()
+            options.text = (existing + ['onboardAccessibility:false', 'pauseOnLostFocus:false']).join(System.lineSeparator()) + System.lineSeparator()
+        }
+    }
+}
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 tasks.withType(AbstractArchiveTask).configureEach { preserveFileTimestamps = false; reproducibleFileOrder = true }
 tasks.named('jar', Jar) { from('LICENSE'); from('NOTICE'); manifest { attributes 'Implementation-Version': project.version } }

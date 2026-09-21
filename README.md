@@ -41,11 +41,13 @@ The headband uses the same baked geometry in the inventory and on the player: wo
 
 ## Gallery
 
-The screenshots below show the previous **1.0.3 models**, not the 1.0.4 redesign. Updated in-game captures are pending visual verification; see [model authoring and acceptance checks](docs/model-redesign.md).
+In-game captures of the 1.0.4 industrial models.
 
-![Previous handheld flashlight and Curios headband](assets/gallery/flashlight-and-headband.png)
+![Curios headband with an armor helmet](assets/gallery/headband-with-helmet.png)
 
-![Previous headband mount](assets/gallery/headband.png)
+![Flashlight in the left hand](assets/gallery/offhand-flashlight-left-arm.png)
+
+![Native flashlight button animation](assets/gallery/flashlight-button-animation.gif)
 
 ## Configuration
 
