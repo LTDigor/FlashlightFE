@@ -100,6 +100,8 @@ jobs:
           modrinth-dependencies: |
             vvuO3ImH(required)
             u6dRKJwZ(optional)
+          # Editing old featured versions is optional; upload must still succeed if it is unauthorized.
+          modrinth-unfeature-mode: none
           # maxAttempts=1: no retry after a potentially accepted upload.
           retry-attempts: 1
           fail-mode: fail
