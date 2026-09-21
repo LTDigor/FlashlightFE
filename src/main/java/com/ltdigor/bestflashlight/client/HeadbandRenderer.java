@@ -57,7 +57,8 @@ public final class HeadbandRenderer implements ICurioRenderer {
         BakedModel geometry = client.getModelManager().getModel(id);
         pose.pushPose();
         try {
-            ICurioRenderer.translateIfSneaking(pose, context.entity());
+            // followHeadRotations copies the crouching head pivot as well as its rotation.
+            // An additional Curios sneak translation lowers the lamp onto the wearer's face.
             ICurioRenderer.followHeadRotations(context.entity(), head);
             if (!context.entity().getItemBySlot(EquipmentSlot.HEAD).isEmpty()) {
                 pose.scale(1.15F, 1.15F, 1.15F);
