@@ -28,7 +28,7 @@ type="required"
 versionRange="[21.1.249,21.2)"
 [[dependencies.bestflashlight]]
 modId="curios"
-type="required"
+type="optional"
 [[dependencies.bestflashlight]]
 modId="jei"
 type="optional"

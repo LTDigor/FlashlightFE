@@ -74,7 +74,7 @@ def validate_jar(path, version):
         if len(mods) != 1 or mods[0].get('modId') != 'bestflashlight' or mods[0].get('version') != version:
             raise ValueError('JAR mod ID/version mismatch')
         dependencies = {item['modId']: item for item in metadata['dependencies']['bestflashlight']}
-        for mod, kind in [('minecraft', 'required'), ('neoforge', 'required'), ('curios', 'required'), ('jei', 'optional')]:
+        for mod, kind in [('minecraft', 'required'), ('neoforge', 'required'), ('curios', 'optional'), ('jei', 'optional')]:
             if dependencies.get(mod, {}).get('type') != kind:
                 raise ValueError(f'Incorrect {mod} dependency')
         if dependencies['minecraft'].get('versionRange') != '[1.21.1]' or dependencies['neoforge'].get('versionRange') != '[21.1.249,21.2)':
