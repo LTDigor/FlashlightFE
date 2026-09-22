@@ -1,9 +1,6 @@
 {
-  "parent": "bestflashlight:item/headband_empty",
-  "ambientocclusion": false,
-  "gui_light": "side",
-  "render_type": "minecraft:cutout",
-  "textures": {"particle":"bestflashlight:item/industrial","atlas":"bestflashlight:item/industrial","lens":"bestflashlight:item/industrial"},
+  "parent": "bestflashlight:item/headband_loaded",
+  "textures": {"lens":"bestflashlight:item/industrial_on"},
   "elements": [
     {"name":"strap_front","from":[3.25,13,3.25],"to":[12.75,14.5,3.45],"faces":{"north":{"uv":[4,4,8,8],"texture":"#atlas"},"south":{"uv":[4,4,8,8],"texture":"#atlas"},"east":{"uv":[4,4,8,8],"texture":"#atlas"},"west":{"uv":[4,4,8,8],"texture":"#atlas"},"up":{"uv":[4,4,8,8],"texture":"#atlas"},"down":{"uv":[4,4,8,8],"texture":"#atlas"}}},
     {"name":"strap_back","from":[3.25,13,12.55],"to":[12.75,14.5,12.75],"faces":{"north":{"uv":[4,4,8,8],"texture":"#atlas"},"south":{"uv":[4,4,8,8],"texture":"#atlas"},"east":{"uv":[4,4,8,8],"texture":"#atlas"},"west":{"uv":[4,4,8,8],"texture":"#atlas"},"up":{"uv":[4,4,8,8],"texture":"#atlas"},"down":{"uv":[4,4,8,8],"texture":"#atlas"}}},
@@ -40,7 +37,7 @@
     {"name":"reflector_side_7","from":[6.65,13.340812,1.25],"to":[6.65,14.459188000000001,1.9],"faces":{"east":{"uv":[8,0,12,4],"texture":"#atlas"}},"rotation":{"origin":[8,13.9,8],"axis":"z","angle":-45,"rescale":false}},
     {"name":"bezel_front","from":[6.2,12.1,1.25],"to":[9.8,15.700000000000001,1.25],"faces":{"north":{"uv":[8,8,12,12],"texture":"#atlas"}}},
     {"name":"bezel_back","from":[6.2,12.1,1.6],"to":[9.8,15.700000000000001,1.6],"faces":{"south":{"uv":[8,8,12,12],"texture":"#atlas"}}},
-    {"name":"lens","from":[6.65,12.55,1.9],"to":[9.35,15.25,1.9],"faces":{"north":{"uv":[12,8,16,12],"texture":"#lens"}}},
+    {"name":"lens","from":[6.65,12.55,1.9],"to":[9.35,15.25,1.9],"faces":{"north":{"uv":[12,8,16,12],"texture":"#lens","neoforge_data":{"block_light":15,"sky_light":15,"ambient_occlusion":false}}}},
     {"name":"head_switch","from":[7.55,15.45,2.05],"to":[8.45,15.7,2.7],"faces":{"north":{"uv":[0,4,4,8],"texture":"#atlas"},"south":{"uv":[0,4,4,8],"texture":"#atlas"},"east":{"uv":[0,4,4,8],"texture":"#atlas"},"west":{"uv":[0,4,4,8],"texture":"#atlas"},"up":{"uv":[0,4,4,8],"texture":"#atlas"}}},
     {"name":"battery","from":[6.2,12.6,12.7],"to":[9.8,14.8,14.0],"faces":{"north":{"uv":[0,12,4,16],"texture":"#atlas"},"south":{"uv":[0,12,4,16],"texture":"#atlas"},"east":{"uv":[0,12,4,16],"texture":"#atlas"},"west":{"uv":[0,12,4,16],"texture":"#atlas"},"up":{"uv":[0,12,4,16],"texture":"#atlas"},"down":{"uv":[0,12,4,16],"texture":"#atlas"}}},
     {"name":"battery_latch","from":[7.55,12.4,14.0],"to":[8.45,13.0,14.15],"faces":{"south":{"uv":[8,0,12,4],"texture":"#atlas"},"east":{"uv":[8,0,12,4],"texture":"#atlas"},"west":{"uv":[8,0,12,4],"texture":"#atlas"},"up":{"uv":[8,0,12,4],"texture":"#atlas"},"down":{"uv":[8,0,12,4],"texture":"#atlas"}}},

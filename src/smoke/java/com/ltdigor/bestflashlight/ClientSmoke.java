@@ -5,6 +5,7 @@ import com.mojang.logging.LogUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.CameraType;
@@ -14,6 +15,8 @@ import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.resources.model.ModelResourceLocation;
+import net.minecraft.client.tutorial.TutorialSteps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.Difficulty;
@@ -47,6 +50,8 @@ public final class ClientSmoke {
     private static boolean opened, prepared;
     private static int ticks;
     private static java.util.concurrent.CompletableFuture<Void> pending;
+    private static CompletableFuture<Void> resourceReload;
+    private static long resourceReloadDeadlineNanos;
     private static void serverStep(Minecraft mc, Runnable action) { pending = mc.getSingleplayerServer().submit(action); }
     private static final boolean RELOAD = Boolean.getBoolean("bestflashlight.smoke.reload");
     private static final BlockPos WATER_ORPHAN = new BlockPos(-5, -59, -6);
@@ -58,14 +63,24 @@ public final class ClientSmoke {
     private static long captureUntilNanos, lastCaptureNanos;
     private static int captureFrame;
     private static boolean awaitingEmptyPress, emptyPressAccepted, emptyPressMoved;
+    private static boolean awaitingNativePress, nativePressAccepted, nativePressDeepened;
+    private static long nativePressDeadlineNanos;
     @SubscribeEvent public static void press(FlashlightNetwork.PressEvent event) {
         Minecraft mc = Minecraft.getInstance();
+        if (awaitingNativePress && mc.player != null && event.owner().equals(mc.player.getUUID())
+                && event.hand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && !event.previousEnabled() && event.enabled())
+            nativePressAccepted = true;
         if (!awaitingEmptyPress || mc.player == null || !event.owner().equals(mc.player.getUUID())) return;
         if (event.hand() != net.minecraft.world.InteractionHand.OFF_HAND || event.previousEnabled() || event.enabled())
             throw new AssertionError("Empty survival press returned wrong authoritative animation state");
         emptyPressAccepted = true;
     }
     @SubscribeEvent public static void render(RenderFrameEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (awaitingNativePress && mc.player != null && ButtonAnimation.offset(mc.player.getUUID(),
+                net.minecraft.world.InteractionHand.MAIN_HAND, true) < -.35)
+            nativePressDeepened = true;
         if (capturePrefix == null) return;
         long now = System.nanoTime();
         if (now > captureUntilNanos || captureFrame >= 12) {
@@ -74,7 +89,6 @@ public final class ClientSmoke {
         }
         if (now - lastCaptureNanos < 50_000_000L) return;
         lastCaptureNanos = now;
-        Minecraft mc = Minecraft.getInstance();
         Screenshot.grab(mc.gameDirectory, "%s-frame-%03d.png".formatted(capturePrefix, captureFrame++),
             mc.getMainRenderTarget(), message -> {});
     }
@@ -109,11 +123,24 @@ public final class ClientSmoke {
             pending.join();
             pending = null;
         }
+        if (resourceReload != null) {
+            if (!resourceReload.isDone()) {
+                if (System.nanoTime() > resourceReloadDeadlineNanos)
+                    throw new AssertionError("Timed out waiting 60 seconds for Minecraft resource-pack reload");
+                return;
+            }
+            resourceReload.join();
+            resourceReload = null;
+            resourceReloadDeadlineNanos = 0;
+            assertRenderers(mc);
+            LogUtils.getLogger().info("FLASHLIGHT_RESOURCE_RELOAD_SMOKE_PASS: native item and Curios renderers reloaded");
+        }
         if(!opened && mc.screen instanceof TitleScreen && mc.getOverlay()==null) {
             opened=true;
-            if(CuriosRendererRegistry.getRenderer(FlashlightMod.HEADBAND.get()).isEmpty()) throw new AssertionError("Missing headband renderer");
-            if(mc.getItemRenderer().getModel(new ItemStack(FlashlightMod.HEADBAND.get()),null,null,0)==mc.getModelManager().getMissingModel()) throw new AssertionError("Missing headband item model");
-            mc.options.renderDistance().set(4); mc.options.simulationDistance().set(5); mc.options.pauseOnLostFocus=false;
+            assertRenderers(mc);
+            mc.options.renderDistance().set(4); mc.options.simulationDistance().set(5); mc.options.pauseOnLostFocus=false; mc.options.hideGui=true;
+            mc.getTutorial().setStep(TutorialSteps.NONE);
+            mc.getToasts().clear();
             if (RELOAD) {
                 readMarker(mc);
                 mc.createWorldOpenFlows().openWorld(worldName, () -> { throw new AssertionError("World reload cancelled"); });
@@ -170,6 +197,16 @@ public final class ClientSmoke {
             });
             return;
         }
+        if (awaitingNativePress) {
+            if (!nativePressDeepened) {
+                if (System.nanoTime() > nativePressDeadlineNanos)
+                    throw new AssertionError("Accepted native press never reached a rendered deep button phase: accepted="
+                        + nativePressAccepted + ", offset=" + ButtonAnimation.offset(mc.player.getUUID(),
+                        net.minecraft.world.InteractionHand.MAIN_HAND, true));
+                return;
+            }
+            awaitingNativePress = false;
+        }
         ticks++;
         if (ticks >= 430 && ticks <= 450) {
             mc.player.yBodyRot = 45;
@@ -201,6 +238,16 @@ public final class ClientSmoke {
         if(ticks==140) shot(mc,"headband-with-helmet.png");
         if(ticks==160) serverStep(mc, () -> mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()).setItemSlot(EquipmentSlot.HEAD,ItemStack.EMPTY));
         if(ticks==200) shot(mc,"headband-forehead.png");
+        if(ticks==205) {
+            resourceReload = mc.reloadResourcePacks();
+            resourceReloadDeadlineNanos = System.nanoTime() + 60_000_000_000L;
+            return;
+        }
+        if(ticks==210) { mc.options.keyShift.setDown(true); mc.player.setYRot(45); mc.player.setYHeadRot(45); }
+        if(ticks==215) {
+            if (!mc.player.isCrouching()) throw new AssertionError("Client sneak key did not produce a crouching capture pose");
+            shot(mc,"headband-sneaking-turned.png"); mc.options.keyShift.setDown(false); mc.player.setYRot(0); mc.player.setYHeadRot(0);
+        }
         if(ticks==220) { mc.options.setCameraType(CameraType.FIRST_PERSON); mc.options.fov().set(70); }
         if(ticks==250) shot(mc,"beam-12-blocks-15-degrees.png");
         if(ticks==270) {
@@ -261,15 +308,21 @@ public final class ClientSmoke {
             reloadOptions(mc);
             if (!FlashlightClientEvents.HANDHELD.matches(GLFW.GLFW_KEY_K, 0))
                 throw new AssertionError("Handheld rebind did not survive options save/reload");
+        }
+        if(ticks==401) {
             shot(mc, "native-flashlight-button-first-person-raised.png");
             startCapture("button-fp");
+            awaitingNativePress = true;
+            nativePressAccepted = false;
+            nativePressDeepened = false;
+            nativePressDeadlineNanos = System.nanoTime() + 2_000_000_000L;
             postKey(GLFW.GLFW_KEY_K, GLFW.GLFW_PRESS);
             postKey(GLFW.GLFW_KEY_K, GLFW.GLFW_REPEAT);
         }
         if(ticks==402) {
             if (!LampData.enabled(mc.player.getMainHandItem())) throw new AssertionError("Native rebound key did not enable main-hand flashlight");
-            double y = ButtonAnimation.offset(mc.player.getUUID(), net.minecraft.world.InteractionHand.MAIN_HAND, true);
-            if (y >= -0.35) throw new AssertionError("Accepted press did not depress native renderer button beyond latched state");
+            if (!nativePressAccepted || !nativePressDeepened)
+                throw new AssertionError("Accepted native press did not reach a rendered deep button phase");
             shot(mc, "native-flashlight-button-first-person-depressed.png");
         }
         if(ticks==410) {
@@ -314,6 +367,10 @@ public final class ClientSmoke {
             });
         }
         if(ticks==455) postKey(GLFW.GLFW_KEY_K, GLFW.GLFW_PRESS);
+        if(ticks==460) {
+            mc.options.setCameraType(CameraType.FIRST_PERSON); mc.options.fov().set(70); mc.options.hideGui = false;
+        }
+        if(ticks==462) shot(mc, "offhand-flashlight-left-arm.png");
         if(ticks==470) {
             if (!LampData.enabled(mc.player.getOffhandItem()) || LampEnergy.stored(mc.player.getOffhandItem()) != 1000)
                 throw new AssertionError("Rebound handheld key did not fall back to offhand with occupied main hand: main="
@@ -382,7 +439,21 @@ public final class ClientSmoke {
         }
     }
     private static void shot(Minecraft mc,String name) {
+        mc.getTutorial().setStep(TutorialSteps.NONE);
+        mc.getToasts().clear();
         Screenshot.grab(mc.gameDirectory,name,mc.getMainRenderTarget(),message -> LogUtils.getLogger().info("Screenshot: {}",message.getString()));
+    }
+    private static void assertRenderers(Minecraft mc) {
+        if(CuriosRendererRegistry.getRenderer(FlashlightMod.HEADBAND.get()).isEmpty()) throw new AssertionError("Missing headband renderer");
+        if(mc.getItemRenderer().getModel(new ItemStack(FlashlightMod.HEADBAND.get()),null,null,0)==mc.getModelManager().getMissingModel())
+            throw new AssertionError("Missing headband item model");
+        assertModel(mc, ModelResourceLocation.inventory(FlashlightMod.resource("flashlight")), "flashlight inventory");
+        for (String name : new String[] {"flashlight_button", "headband_empty", "headband_loaded", "headband_loaded_on"})
+            assertModel(mc, ModelResourceLocation.standalone(FlashlightMod.resource("item/" + name)), name);
+    }
+    private static void assertModel(Minecraft mc, ModelResourceLocation id, String name) {
+        if (mc.getModelManager().getModel(id) == mc.getModelManager().getMissingModel())
+            throw new AssertionError("Missing baked model: " + name);
     }
     private static void postKey(int key, int action) {
         NeoForge.EVENT_BUS.post(new InputEvent.Key(key, 0, action, 0));

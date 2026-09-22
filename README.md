@@ -8,7 +8,7 @@ A Minecraft **1.21.1 / NeoForge** flashlight mod by **LTDigor**. Rechargeable ha
 
 ## Install
 
-Install `flashlight-fe-1.0.3.jar` on both client and server, with NeoForge **21.1.249+** within 21.1 and Curios **9.5.1+** within version 9. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
+Install `flashlight-fe-1.0.4.jar` on both client and server, with NeoForge **21.1.249+** within 21.1 and Curios **9.5.1+** within version 9. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
 
 This version uses the new `bestflashlight` namespace. It is **not a drop-in update** for the previous personal-use `flashlight` derivative: old items, helmet upgrades and configuration are not migrated. Test in a new world before changing an existing installation.
 
@@ -35,13 +35,19 @@ Two bindings appear under **Flashlight FE** in Minecraft Controls. Both accept k
 
 One physical press toggles once; holding does not repeat. Screens and chat ignore lamp input. Rebinding handheld away from the right mouse button removes its toggle action from that button. Server checks the actual inventory for each request.
 
-The handheld has a black mechanical button in a metal rim. Each accepted press animates for about 0.25 seconds, resting partly recessed when on and raised when off. Rapid presses continue from the current position. An empty survival battery still plays the press and release. The native renderer draws the body and moving button separately in first and third person; the server notifies the owner and tracking players. Animation state stays on the client.
+The handheld has an octagonal graphite body, ribbed grip, recessed optic and orange mechanical button. Each accepted press animates for about 0.25 seconds, resting partly recessed when on and raised when off. Rapid presses continue from the current position. An empty survival battery still plays the press and release. The native renderer draws the body and moving button separately in first and third person; the server notifies the owner and tracking players. Animation state stays on the client.
+
+The headband uses the same baked geometry in the inventory and on the player: woven strap, side hinges, compact central lamp and rear battery housing. The rear housing is visual only, not a separate battery item. Only the enabled optic is full-bright; the strap and housing retain normal scene lighting.
 
 ## Gallery
 
-![Handheld flashlight and Curios headband](assets/gallery/flashlight-and-headband.png)
+In-game captures of the 1.0.4 industrial models.
 
-![Headband mount](assets/gallery/headband.png)
+![Curios headband with an armor helmet](assets/gallery/headband-with-helmet.png)
+
+![Flashlight in the left hand](assets/gallery/offhand-flashlight-left-arm.png)
+
+![Native flashlight button animation](assets/gallery/flashlight-button-animation.gif)
 
 ## Configuration
 
@@ -61,7 +67,7 @@ If every real player in the current dimension has a compatible, enabled LambDyna
 
 ## Source and assets
 
-Flashlight FE uses its own cuboid models and native NeoForge renderer. Texture and click-sound references resolve to assets supplied by Minecraft; Minecraft assets are not bundled or relicensed. No other mod's models, textures, sounds or animations are included.
+Flashlight FE uses original industrial models, pixel-art texture atlases and a native NeoForge renderer. Click-sound references resolve to assets supplied by Minecraft; Minecraft assets are not bundled or relicensed. No other mod's models, textures, sounds or animations are included. The checked-in models and textures can be regenerated with Python's standard library; Python is not needed at runtime. See [model authoring](docs/model-redesign.md).
 
 This repository contains the standalone implementation under the [MIT License](LICENSE), copyright 2026 LTDigor. Dependencies retain their own licenses; see [NOTICE](NOTICE). The internal `bestflashlight` IDs are retained so existing standalone items, saved bindings, components and configuration remain compatible. This rename does not migrate items from the older `flashlight` mod.
 
@@ -76,6 +82,8 @@ If an upload times out, the workflow preserves an upload-intent receipt and stop
 Use JDK 21 and import the Gradle project in IntelliJ IDEA.
 
 ```sh
+python3 -m unittest discover -s scripts -p '*_test.py'
+python3 scripts/generate_model_assets.py --check
 ./gradlew build
 ./gradlew runGameTestServer
 ./gradlew runClientSmoke
@@ -83,6 +91,6 @@ Use JDK 21 and import the Gradle project in IntelliJ IDEA.
 python3 scripts/test_multiplayer.py
 ```
 
-Output: `build/libs/flashlight-fe-1.0.3.jar`.
+Output: `build/libs/flashlight-fe-1.0.4.jar`.
 
 GameTests exercise real FE charging, the IE station, crafting, Curios slots, beam geometry, water and shared ownership. Client smoke creates an isolated creative world and checks models, synchronization, both bindings, rebinding, held input, block interactions and button screenshots; reload smoke reopens it to check persistence and orphan cleanup. The multiplayer harness uses a creative player and a survival player on a disposable loopback server, checking FE behavior and press synchronization to the owner and observers. Test sources and IE are excluded from the production JAR; run files and screenshots are ignored by Git.
