@@ -92,6 +92,7 @@ public class EnergyGameTests {
 
     @GameTest(template = "empty")
     public static void survivalDrainReturnsAfterCreativeMode(GameTestHelper helper) {
+        useLegacyEnergyRate();
         FakePlayer player = player(helper, "mode-energy", GameType.CREATIVE);
         ItemStack lamp = lamp(2);
         try {
@@ -123,12 +124,49 @@ public class EnergyGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = "empty", batch = "fractional_energy", timeoutTicks = 100)
+    public static void fractionalDrainKeepsLightBetweenWholeFeCharges(GameTestHelper helper) {
+        FakePlayer player = player(helper, "fractional-energy", GameType.SURVIVAL);
+        double previous = FlashlightConfig.ENERGY_PER_TICK.get();
+        ItemStack lamp = lamp(2);
+        int[] emittedTicks = {0};
+        try {
+            FlashlightConfig.ENERGY_PER_TICK.set(0.025);
+            FlashlightConfig.ENERGY_PER_TICK.clearCache();
+            LampData.setEnabled(lamp, true);
+            player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
+            helper.onEachTick(() -> {
+                FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                emittedTicks[0]++;
+                if (emittedTicks[0] == 40) {
+                    helper.assertTrue(LampEnergy.stored(lamp) == 1 && LampData.enabled(lamp) && hasLight(helper),
+                        "A 0.025 FE/t lamp must stay lit after its first 40-tick FE charge");
+                }
+                if (emittedTicks[0] == 80) {
+                    helper.assertTrue(LampEnergy.stored(lamp) == 0 && !LampData.enabled(lamp),
+                        "The last FE must switch the fractional lamp off after another 40 ticks");
+                    FlashlightConfig.ENERGY_PER_TICK.set(previous);
+                    FlashlightConfig.ENERGY_PER_TICK.clearCache();
+                    FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+                    player.discard();
+                    helper.succeed();
+                }
+            });
+        } catch (RuntimeException exception) {
+            FlashlightConfig.ENERGY_PER_TICK.set(previous);
+            FlashlightConfig.ENERGY_PER_TICK.clearCache();
+            FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            player.discard();
+            throw exception;
+        }
+    }
+
     @GameTest(template = "empty", batch = "config_energy_cost")
     public static void creativeBypassesEnergyCostAboveCapacity(GameTestHelper helper) {
         FakePlayer player = player(helper, "creative-high-cost", GameType.CREATIVE);
-        int previous = FlashlightConfig.ENERGY_PER_TICK.get();
+        double previous = FlashlightConfig.ENERGY_PER_TICK.get();
         try {
-            FlashlightConfig.ENERGY_PER_TICK.set(20_000);
+            FlashlightConfig.ENERGY_PER_TICK.set(20_000.0);
             FlashlightConfig.ENERGY_PER_TICK.clearCache();
             ItemStack empty = lamp(0);
             player.setItemSlot(EquipmentSlot.MAINHAND, empty);
@@ -173,6 +211,11 @@ public class EnergyGameTests {
         ItemStack mounted = new ItemStack(FlashlightMod.HEADBAND.get());
         LampData.mount(mounted, lamp(0));
         return List.of(lamp(0), mounted);
+    }
+
+    private static void useLegacyEnergyRate() {
+        FlashlightConfig.ENERGY_PER_TICK.set(1.0);
+        FlashlightConfig.ENERGY_PER_TICK.clearCache();
     }
 
     private static boolean hasLight(GameTestHelper helper) {

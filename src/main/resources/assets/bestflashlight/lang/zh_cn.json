@@ -1,0 +1,17 @@
+{
+  "item.bestflashlight.flashlight": "手电筒",
+  "item.bestflashlight.headband": "头灯绑带",
+  "block.bestflashlight.flashlight_light": "手电筒光束",
+  "key.bestflashlight.toggle": "切换头灯",
+  "key.categories.bestflashlight": "Flashlight FE",
+  "tooltip.bestflashlight.energy": "电量：%s/%s FE",
+  "tooltip.bestflashlight.on": "灯已开启",
+  "tooltip.bestflashlight.off": "灯已关闭",
+  "tooltip.bestflashlight.headband.mount": "安装：在任意合成格中组合绑带和手电筒",
+  "tooltip.bestflashlight.headband.loaded": "已安装手电筒",
+  "tooltip.bestflashlight.headband.unmount": "拆卸：单独合成已装载的绑带",
+  "jei.bestflashlight.headband.mounting": "头灯：在任意两个合成格中放入一个空头灯绑带和一个手电筒，位置不限。要取下手电筒，请单独合成已装载的绑带。",
+  "message.bestflashlight.on": "手电筒已开启",
+  "message.bestflashlight.off": "手电筒已关闭",
+  "key.bestflashlight.handheld": "切换手持手电筒"
+}

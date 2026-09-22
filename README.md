@@ -8,7 +8,7 @@ A Minecraft **1.21.1 / NeoForge** flashlight mod by **LTDigor**. Rechargeable ha
 
 ## Install
 
-Install `flashlight-fe-1.1.0.jar` on both client and server, with NeoForge **21.1.249+** within 21.1. Curios **9.5.1+** within version 9 is optional. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
+Install `flashlight-fe-1.1.1.jar` on both client and server, with NeoForge **21.1.249+** within 21.1. Curios **9.5.1+** within version 9 is optional. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
 
 This version uses the new `bestflashlight` namespace. It is **not a drop-in update** for the previous personal-use `flashlight` derivative: old items, helmet upgrades and configuration are not migrated. Test in a new world before changing an existing installation.
 
@@ -55,12 +55,12 @@ NeoForge uses `config/bestflashlight-server.toml` as the default server config. 
 | Setting | Default | Meaning |
 |---|---:|---|
 | `energyCapacity` | 10000 | Maximum stored FE |
-| `energyPerTick` | 1 | FE per emitting tick; 0 disables consumption |
+| `energyPerTick` | 0.025 | FE per emitting tick; fractional values are charged as whole FE on scheduled ticks; 0 disables consumption |
 | `worksUnderwater` | true | Allow submerged emitters |
 | `beamRange` | 12.0 | Beam length, 1–32 blocks |
-| `coneAngleDegrees` | 15.0 | Full cone angle, 1–90 degrees |
+| `coneAngleDegrees` | 35.0 | Full cone angle, 1–90 degrees |
 
-At 20 TPS, the default battery lasts about 8 minutes 20 seconds. Without LambDynamicLights, vanilla block lighting supplies the illumination, so soft light spreads outside the source-placement cone. Temporary carriers preserve exact source/flowing-water levels, preserve normal source-water bucket pickup, avoid water plants, and clean themselves up after normal use and chunk reloads. Overlapping beams share light without one player removing another player's contribution. Near walls, tracing falls back safely instead of losing the whole beam. Headbands place sources at forward ray endpoints to reduce illumination around the player.
+At 20 TPS, the default battery lasts about 5 hours 33 minutes. Without LambDynamicLights, vanilla block lighting supplies the illumination, so soft light spreads outside the source-placement cone. Temporary carriers preserve exact source/flowing-water levels, preserve normal source-water bucket pickup, avoid water plants, and clean themselves up after normal use and chunk reloads. Overlapping beams share light without one player removing another player's contribution. Near walls, tracing falls back safely instead of losing the whole beam. Headbands place sources at forward ray endpoints to reduce illumination around the player.
 
 If every real player in the current dimension has a compatible, enabled LambDynamicLights bridge, the server uses a two-phase readiness handshake and only then skips its temporary block-light beam for that dimension. Clients render directional cones for all visible players; mixed or older clients automatically keep the server fallback. Static server beam geometry and client occlusion probes are cached between bounded refreshes. FE-only drain uses lightweight owner synchronization instead of resending full held/Curios stacks every tick; enabled state, names, mounting and other component changes still use normal synchronization.
 
@@ -90,6 +90,6 @@ python3 scripts/generate_model_assets.py --check
 python3 scripts/test_multiplayer.py
 ```
 
-Output: `build/libs/flashlight-fe-1.1.0.jar`.
+Output: `build/libs/flashlight-fe-1.1.1.jar`.
 
 GameTests exercise real FE charging, the IE station, crafting, Curios slots, beam geometry, water and shared ownership. Client smoke creates an isolated creative world and checks models, synchronization, both bindings, rebinding, held input, block interactions and button screenshots; reload smoke reopens it to check persistence and orphan cleanup. The multiplayer harness uses a creative player and a survival player on a disposable loopback server, checking FE behavior and press synchronization to the owner and observers. Test sources and IE are excluded from the production JAR; run files and screenshots are ignored by Git.

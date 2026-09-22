@@ -53,7 +53,7 @@ public final class LampEnergy implements IEnergyStorage {
     }
 
     public static boolean hasPower(ItemStack stack, LivingEntity actor) {
-        return creative(actor) || stored(stack) >= FlashlightConfig.ENERGY_PER_TICK.get();
+        return creative(actor) || minimumRequiredEnergy() == 0 || stored(stack) >= minimumRequiredEnergy();
     }
 
     /** Context-free FE operations retain survival semantics. */
@@ -61,17 +61,41 @@ public final class LampEnergy implements IEnergyStorage {
 
     /** Called once per emitting server tick. Creative never writes the stored charge. */
     public static boolean consume(ItemStack stack, LivingEntity actor) {
+        return consume(stack, actor, costForTick(FlashlightConfig.ENERGY_PER_TICK.get(), 0));
+    }
+
+    /** Called once per emitting server tick. Creative never writes the stored charge. */
+    public static boolean consume(ItemStack stack, LivingEntity actor, int cost) {
         if (!LampData.enabled(stack)) return false;
-        if (!hasPower(stack, actor)) { LampData.setEnabled(stack, false); return false; }
+        if (!creative(actor) && (cost > 0 ? stored(stack) < cost : !hasPower(stack, actor))) {
+            LampData.setEnabled(stack, false);
+            return false;
+        }
         if (!creative(actor)) {
-            int cost = FlashlightConfig.ENERGY_PER_TICK.get();
             if (cost > 0) {
                 int remaining = stored(stack) - cost;
                 setStored(stack, remaining);
-                if (remaining < cost) LampData.setEnabled(stack, false);
+                if (remaining < minimumRequiredEnergy()) LampData.setEnabled(stack, false);
             }
         }
         return true;
+    }
+
+    static int costForTick(long gameTick) {
+        return costForTick(FlashlightConfig.ENERGY_PER_TICK.get(), gameTick);
+    }
+
+    static int costForTick(double energyPerTick, long gameTick) {
+        if (energyPerTick <= 0.0 || gameTick < 0) return 0;
+        int whole = (int) Math.floor(energyPerTick);
+        double fraction = energyPerTick - whole;
+        int fractional = (int) (Math.floor((gameTick + 1) * fraction) - Math.floor(gameTick * fraction));
+        return whole + fractional;
+    }
+
+    private static int minimumRequiredEnergy() {
+        double rate = FlashlightConfig.ENERGY_PER_TICK.get();
+        return rate <= 0.0 ? 0 : (int) Math.ceil(rate);
     }
 
     public static boolean toggle(ItemStack stack) { return toggle(stack, null); }

@@ -14,7 +14,7 @@ final class FlashlightOwnerSync {
 
     static void syncDrain(ServerPlayer player, LampSource source) {
         if (player instanceof FakePlayer || source.headMounted() || player.isCreative()
-            || FlashlightConfig.ENERGY_PER_TICK.get() <= 0) return;
+            || FlashlightConfig.ENERGY_PER_TICK.get() <= 0.0) return;
         if (!player.connection.hasChannel(FlashlightNetwork.HandheldEnergy.TYPE)) return;
 
         ItemStack current = source.stack();
