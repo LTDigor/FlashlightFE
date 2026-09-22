@@ -120,7 +120,7 @@ def models():
             + [box('button_gasket', (7.1, 9.57, 8.25), (8.9, 9.76, 10.25), 'rubber'),
                box('clip_anchor', (7.55, 6.1, 12.8), (8.45, 6.45, 13.2), 'steel'),
                box('pocket_clip', (7.6, 5.98, 9.9), (8.4, 6.13, 13.1), 'steel'),
-               box('serial_plate', (9.651, 7.65, 10.5), (9.651, 8.35, 12.25), 'label', ('east',))])
+               box('serial_plate', (9.66, 7.65, 10.5), (9.66, 8.35, 12.25), 'label', ('east',))])
     button = box('button', (7.25, 9.55, 8.4), (8.75, 10.5, 10.1), 'orange',
                  ('north', 'south', 'east', 'west', 'up'))
     button['faces']['up'] = face('power')

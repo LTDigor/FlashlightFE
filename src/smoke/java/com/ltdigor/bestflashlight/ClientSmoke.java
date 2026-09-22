@@ -63,14 +63,24 @@ public final class ClientSmoke {
     private static long captureUntilNanos, lastCaptureNanos;
     private static int captureFrame;
     private static boolean awaitingEmptyPress, emptyPressAccepted, emptyPressMoved;
+    private static boolean awaitingNativePress, nativePressAccepted, nativePressDeepened;
+    private static long nativePressDeadlineNanos;
     @SubscribeEvent public static void press(FlashlightNetwork.PressEvent event) {
         Minecraft mc = Minecraft.getInstance();
+        if (awaitingNativePress && mc.player != null && event.owner().equals(mc.player.getUUID())
+                && event.hand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && !event.previousEnabled() && event.enabled())
+            nativePressAccepted = true;
         if (!awaitingEmptyPress || mc.player == null || !event.owner().equals(mc.player.getUUID())) return;
         if (event.hand() != net.minecraft.world.InteractionHand.OFF_HAND || event.previousEnabled() || event.enabled())
             throw new AssertionError("Empty survival press returned wrong authoritative animation state");
         emptyPressAccepted = true;
     }
     @SubscribeEvent public static void render(RenderFrameEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (awaitingNativePress && mc.player != null && ButtonAnimation.offset(mc.player.getUUID(),
+                net.minecraft.world.InteractionHand.MAIN_HAND, true) < -.35)
+            nativePressDeepened = true;
         if (capturePrefix == null) return;
         long now = System.nanoTime();
         if (now > captureUntilNanos || captureFrame >= 12) {
@@ -79,7 +89,6 @@ public final class ClientSmoke {
         }
         if (now - lastCaptureNanos < 50_000_000L) return;
         lastCaptureNanos = now;
-        Minecraft mc = Minecraft.getInstance();
         Screenshot.grab(mc.gameDirectory, "%s-frame-%03d.png".formatted(capturePrefix, captureFrame++),
             mc.getMainRenderTarget(), message -> {});
     }
@@ -188,6 +197,16 @@ public final class ClientSmoke {
             });
             return;
         }
+        if (awaitingNativePress) {
+            if (!nativePressDeepened) {
+                if (System.nanoTime() > nativePressDeadlineNanos)
+                    throw new AssertionError("Accepted native press never reached a rendered deep button phase: accepted="
+                        + nativePressAccepted + ", offset=" + ButtonAnimation.offset(mc.player.getUUID(),
+                        net.minecraft.world.InteractionHand.MAIN_HAND, true));
+                return;
+            }
+            awaitingNativePress = false;
+        }
         ticks++;
         if (ticks >= 430 && ticks <= 450) {
             mc.player.yBodyRot = 45;
@@ -289,15 +308,21 @@ public final class ClientSmoke {
             reloadOptions(mc);
             if (!FlashlightClientEvents.HANDHELD.matches(GLFW.GLFW_KEY_K, 0))
                 throw new AssertionError("Handheld rebind did not survive options save/reload");
+        }
+        if(ticks==401) {
             shot(mc, "native-flashlight-button-first-person-raised.png");
             startCapture("button-fp");
+            awaitingNativePress = true;
+            nativePressAccepted = false;
+            nativePressDeepened = false;
+            nativePressDeadlineNanos = System.nanoTime() + 2_000_000_000L;
             postKey(GLFW.GLFW_KEY_K, GLFW.GLFW_PRESS);
             postKey(GLFW.GLFW_KEY_K, GLFW.GLFW_REPEAT);
         }
         if(ticks==402) {
             if (!LampData.enabled(mc.player.getMainHandItem())) throw new AssertionError("Native rebound key did not enable main-hand flashlight");
-            double y = ButtonAnimation.offset(mc.player.getUUID(), net.minecraft.world.InteractionHand.MAIN_HAND, true);
-            if (y >= -0.35) throw new AssertionError("Accepted press did not depress native renderer button beyond latched state");
+            if (!nativePressAccepted || !nativePressDeepened)
+                throw new AssertionError("Accepted native press did not reach a rendered deep button phase");
             shot(mc, "native-flashlight-button-first-person-depressed.png");
         }
         if(ticks==410) {

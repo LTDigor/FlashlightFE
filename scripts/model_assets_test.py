@@ -185,6 +185,13 @@ class ModelAssetsTest(unittest.TestCase):
         self.assertLessEqual(button['to'][0] - button['from'][0], 1.6)
         self.assertFalse(any(e['name'] == 'button' for e in body), 'Animated button must not be duplicated')
 
+    def test_serial_plate_clears_the_grip_surface(self):
+        elements = {e['name']: e for e in resolve('flashlight_off')['elements']}
+        plate = elements['serial_plate']
+        grip = elements['grip_side_2']
+        self.assertEqual(plate['from'][0], plate['to'][0])
+        self.assertGreaterEqual(plate['from'][0] - grip['from'][0], .01 - 1e-9)
+
     def test_headband_fits_outer_skin_layer_and_sits_above_eyes(self):
         empty = resolve('headband_empty')['elements']
         strap = {e['name']: e for e in empty if e['name'].startswith('strap_')}

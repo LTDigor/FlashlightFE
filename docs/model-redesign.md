@@ -55,7 +55,7 @@ behavior; the existing client smoke harness covers rendering/input paths. Do not
 report manual visual checks as passed merely because asset tests or compilation
 succeed.
 
-### Recorded vanilla client smoke
+### Recorded client validation
 
 `runClientSmoke` now starts with first-run accessibility onboarding disabled in
 its isolated run directory, then uses the actual client to create a disposable
@@ -65,7 +65,9 @@ third-person native button movement, left-hand flashlight placement, and the
 existing real input assertions. It also invoked `Minecraft.reloadResourcePacks()`
 and re-checked the native item and Curios renderer registrations after completion.
 
-The captures are evidence for those vanilla states only. Empty/off headband,
-slim-arm skin, GUI, item-frame, dropped-item, manual F3+T, and shader-preset
-appearance remain deferred visual checks. The checked-in gallery images and GIF
+The same client smoke also passed with Iris 1.8.12, Sodium 0.6.13 and
+Complementary Reimagined r5.9.1, including resource reload and native button
+animation. The crouching headlamp offset was corrected after inspecting the
+actual client captures. Empty headband, slim-arm skin, GUI, item-frame, dropped-item
+and the manual F3+T keypress remain outside the recorded visual coverage. The checked-in gallery images and GIF
 come directly from that client-smoke run; they are not generated previews.
