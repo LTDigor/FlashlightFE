@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- Make Curios optional: loaded headbands equip to Curios' standard `head` slot when available, or Minecraft's vanilla head slot otherwise.
+- Keep Curios rendering, equipment synchronization and legacy-item recovery dormant when Curios is absent.
+- Remove obsolete gallery screenshots and the unused repository description file.
+
 ## 1.0.4
 
 - Redesign the handheld flashlight with an octagonal graphite body, ribbed grip, steel bezel, recessed optic, pocket clip and orange mechanical switch.
