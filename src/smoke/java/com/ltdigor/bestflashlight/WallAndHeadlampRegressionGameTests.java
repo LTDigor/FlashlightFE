@@ -24,6 +24,7 @@ import top.theillusivec4.curios.api.CuriosApi;
 public class WallAndHeadlampRegressionGameTests {
     @GameTest(template = "empty", batch = "beam_near_wall")
     public static void handheldDoesNotSwitchOffWhenEmitterOverlapsNearbyWall(GameTestHelper helper) {
+        useLegacyEnergyRate();
         ServerLevel level = helper.getLevel();
         ServerPlayer player = new FakePlayer(level, new GameProfile(UUID.randomUUID(), "wall-handheld"));
         try {
@@ -94,6 +95,7 @@ public class WallAndHeadlampRegressionGameTests {
 
     @GameTest(template = "empty", batch = "beam_near_wall")
     public static void headbandKeepsDimFallbackWhenLookingIntoNearbyWall(GameTestHelper helper) {
+        useLegacyEnergyRate();
         ServerLevel level = helper.getLevel();
         ServerPlayer player = new FakePlayer(level, new GameProfile(UUID.randomUUID(), "wall-headlamp"));
         try {
@@ -134,6 +136,11 @@ public class WallAndHeadlampRegressionGameTests {
         ItemStack lamp = new ItemStack(FlashlightMod.FLASHLIGHT.get());
         lamp.getCapability(Capabilities.EnergyStorage.ITEM).receiveEnergy(energy, false);
         return lamp;
+    }
+
+    private static void useLegacyEnergyRate() {
+        FlashlightConfig.ENERGY_PER_TICK.set(1.0);
+        FlashlightConfig.ENERGY_PER_TICK.clearCache();
     }
 
     private static int countTemporaryLights(GameTestHelper helper) {

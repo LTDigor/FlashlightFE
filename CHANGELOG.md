@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- Reduce the default energy consumption to 0.5 FE per second at 20 TPS, while retaining compatible fractional `energyPerTick` configuration and charging only on whole-FE ticks.
+- Set the default flashlight cone angle to 35 degrees.
+- Add Simplified Chinese game localization and enforce matching Russian, English and Chinese translation keys.
+
 ## 1.1.0
 
 - Make Curios optional: loaded headbands equip to Curios' standard `head` slot when available, or Minecraft's vanilla head slot otherwise.

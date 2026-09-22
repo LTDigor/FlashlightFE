@@ -50,6 +50,7 @@ public class IntegrationGameTests {
 
     @GameTest(template = "empty")
     public static void tickSelectionConsumesExactlyOneSource(GameTestHelper helper) {
+        useLegacyEnergyRate();
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(), new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fe-test"));
         try {
             player.setGameMode(GameType.SURVIVAL);
@@ -149,6 +150,7 @@ public class IntegrationGameTests {
 
     @GameTest(template = "empty")
     public static void staticBeamCacheStillDrainsAndInvalidatesOnMovement(GameTestHelper helper) {
+        useLegacyEnergyRate();
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
             new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "beam-cache"));
         try {
@@ -185,6 +187,7 @@ public class IntegrationGameTests {
 
     @GameTest(template = "empty")
     public static void curiosHeadSlotEmitsWithFreeHands(GameTestHelper helper) {
+        useLegacyEnergyRate();
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(), new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fe-test"));
         try {
             player.setGameMode(GameType.SURVIVAL);
@@ -206,6 +209,7 @@ public class IntegrationGameTests {
 
     @GameTest(template = "empty")
     public static void emptyPrioritySourceFallsThroughInSameTick(GameTestHelper helper) {
+        useLegacyEnergyRate();
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
             new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fallback-energy"));
         try {
@@ -230,6 +234,7 @@ public class IntegrationGameTests {
 
     @GameTest(template = "empty", batch = "config_underwater_fallback")
     public static void submergedHandheldDoesNotStarveDryHeadband(GameTestHelper helper) {
+        useLegacyEnergyRate();
         boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
             new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fallback-water"));
@@ -268,8 +273,9 @@ public class IntegrationGameTests {
 
     @GameTest(template = "empty", batch = "config_underwater_zero_cost")
     public static void waterDisabledAndZeroCostBehave(GameTestHelper helper) {
+        useLegacyEnergyRate();
         boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
-        int originalEnergyPerTick = FlashlightConfig.ENERGY_PER_TICK.get();
+        double originalEnergyPerTick = FlashlightConfig.ENERGY_PER_TICK.get();
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(), new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "fe-test"));
         try {
             player.setGameMode(GameType.SURVIVAL);
@@ -282,7 +288,7 @@ public class IntegrationGameTests {
             FlashlightConfig.WORKS_UNDERWATER.set(true); FlashlightConfig.WORKS_UNDERWATER.clearCache();
             FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
             helper.assertTrue(LampEnergy.stored(item)==99, "Enabled underwater light consumes normally");
-            FlashlightConfig.ENERGY_PER_TICK.set(0); FlashlightConfig.ENERGY_PER_TICK.clearCache();
+            FlashlightConfig.ENERGY_PER_TICK.set(0.0); FlashlightConfig.ENERGY_PER_TICK.clearCache();
             ItemStack empty=lamp(0); LampData.setEnabled(empty,true);
             helper.assertTrue(LampEnergy.consume(empty) && LampEnergy.stored(empty)==0, "Zero cost permits empty battery without underflow");
         } finally {
@@ -321,6 +327,7 @@ public class IntegrationGameTests {
 
     @GameTest(template = "empty", batch = "emitter_occlusion")
     public static void emitterOffsetCannotShineThroughNearbyPane(GameTestHelper helper) {
+        useLegacyEnergyRate();
         var player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
             new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "pane-test"));
         try {
@@ -436,6 +443,10 @@ public class IntegrationGameTests {
         ItemStack lamp=new ItemStack(FlashlightMod.FLASHLIGHT.get());
         lamp.getCapability(Capabilities.EnergyStorage.ITEM).receiveEnergy(energy,false);
         return lamp;
+    }
+    private static void useLegacyEnergyRate() {
+        FlashlightConfig.ENERGY_PER_TICK.set(1.0);
+        FlashlightConfig.ENERGY_PER_TICK.clearCache();
     }
     private static void remove(GameTestHelper helper,ServerPlayer player) {
         FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));

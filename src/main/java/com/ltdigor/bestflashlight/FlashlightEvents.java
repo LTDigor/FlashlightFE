@@ -76,9 +76,12 @@ public final class FlashlightEvents {
         }
 
         ServerLevel level = player.serverLevel();
+        long gameTick = level.getGameTime();
+        int energyCost = LampEnergy.costForTick(gameTick);
         Vec3 look = player.getLookAngle().normalize();
         LampSource source = LampSource.select(player, candidate -> {
-            if (!LampEnergy.hasPower(candidate.stack(), player)) {
+            if (!LampEnergy.hasPower(candidate.stack(), player)
+                || !player.isCreative() && LampEnergy.stored(candidate.stack()) < energyCost) {
                 LampData.setEnabled(candidate.stack(), false);
                 return false;
             }
@@ -98,7 +101,7 @@ public final class FlashlightEvents {
         if (!DynamicLightCoordination.useServerFallback(player)) {
             clearPlayer(player);
             BEAM_CACHE.remove(owner);
-            if (LampEnergy.consume(source.stack(), player)) {
+            if (LampEnergy.consume(source.stack(), player, energyCost) && energyCost > 0) {
                 FlashlightOwnerSync.syncDrain(player, source);
             }
             return;
@@ -107,7 +110,6 @@ public final class FlashlightEvents {
         Vec3 eye = player.getEyePosition();
         double configuredRange = Math.clamp(FlashlightConfig.BEAM_RANGE.get(), 1.0, 32.0);
         double configuredAngle = Math.clamp(FlashlightConfig.CONE_ANGLE_DEGREES.get(), 1.0, 90.0);
-        long gameTick = level.getGameTime();
         BeamCache cached = BEAM_CACHE.get(owner);
         PlayerBeam previous = PLAYER_BEAMS.get(owner);
         boolean reuse = cached != null
@@ -123,9 +125,9 @@ public final class FlashlightEvents {
             && gameTick - cached.computedAtTick() < STATIC_BEAM_REFRESH_TICKS;
 
         if (reuse) {
-            if (!LampEnergy.consume(source.stack(), player)) {
+            if (!LampEnergy.consume(source.stack(), player, energyCost)) {
                 clearPlayer(player);
-            } else {
+            } else if (energyCost > 0) {
                 FlashlightOwnerSync.syncDrain(player, source);
             }
             return;
@@ -147,12 +149,12 @@ public final class FlashlightEvents {
             }
         }
 
-        if (next.isEmpty() || !LampEnergy.consume(source.stack(), player)) {
+        if (next.isEmpty() || !LampEnergy.consume(source.stack(), player, energyCost)) {
             BEAM_CACHE.remove(owner);
             clearPlayer(player);
             return;
         }
-        FlashlightOwnerSync.syncDrain(player, source);
+        if (energyCost > 0) FlashlightOwnerSync.syncDrain(player, source);
 
         if (previous != null && !previous.dimension().equals(level.dimension())) {
             clearPlayer(player);
