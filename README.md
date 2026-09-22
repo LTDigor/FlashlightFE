@@ -8,7 +8,7 @@ A Minecraft **1.21.1 / NeoForge** flashlight mod by **LTDigor**. Rechargeable ha
 
 ## Install
 
-Install `flashlight-fe-1.0.4.jar` on both client and server, with NeoForge **21.1.249+** within 21.1. Curios **9.5.1+** within version 9 is optional. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
+Install `flashlight-fe-1.1.0.jar` on both client and server, with NeoForge **21.1.249+** within 21.1. Curios **9.5.1+** within version 9 is optional. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
 
 This version uses the new `bestflashlight` namespace. It is **not a drop-in update** for the previous personal-use `flashlight` derivative: old items, helmet upgrades and configuration are not migrated. Test in a new world before changing an existing installation.
 
@@ -90,6 +90,6 @@ python3 scripts/generate_model_assets.py --check
 python3 scripts/test_multiplayer.py
 ```
 
-Output: `build/libs/flashlight-fe-1.0.4.jar`.
+Output: `build/libs/flashlight-fe-1.1.0.jar`.
 
 GameTests exercise real FE charging, the IE station, crafting, Curios slots, beam geometry, water and shared ownership. Client smoke creates an isolated creative world and checks models, synchronization, both bindings, rebinding, held input, block interactions and button screenshots; reload smoke reopens it to check persistence and orphan cleanup. The multiplayer harness uses a creative player and a survival player on a disposable loopback server, checking FE behavior and press synchronization to the owner and observers. Test sources and IE are excluded from the production JAR; run files and screenshots are ignored by Git.
