@@ -5,6 +5,7 @@ import com.ltdigor.bestflashlight.FlashlightNetwork;
 import com.ltdigor.bestflashlight.LampData;
 import com.ltdigor.bestflashlight.LampEnergy;
 import com.ltdigor.bestflashlight.LampSource;
+import java.lang.reflect.InvocationTargetException;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
@@ -13,7 +14,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import top.theillusivec4.curios.api.type.inventory.IDynamicStackHandler;
 
 @Pseudo
 @Mixin(targets = "top.theillusivec4.curios.common.event.CuriosEventHandler", remap = false)
@@ -32,12 +32,16 @@ abstract class CuriosCommonEventsMixin {
         remap = false
     )
     private ItemStack bestflashlight$captureCurioSlot(
-        IDynamicStackHandler handler,
+        Object handler,
         int slotIndex,
         EntityTickEvent.Post event
     ) {
         BESTFLASHLIGHT_SLOT_INDEX.set(slotIndex);
-        return handler.getPreviousStackInSlot(slotIndex);
+        try {
+            return (ItemStack) handler.getClass().getMethod("getPreviousStackInSlot", int.class).invoke(handler, slotIndex);
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException exception) {
+            throw new IllegalStateException("Curios stack handler changed", exception);
+        }
     }
 
     @Redirect(

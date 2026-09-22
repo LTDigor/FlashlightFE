@@ -4,15 +4,17 @@ import com.ltdigor.bestflashlight.FlashlightMod;
 import com.ltdigor.bestflashlight.LampData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.ItemRenderer;
-import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.resources.model.ModelResourceLocation;
@@ -23,12 +25,10 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ModelEvent;
-import top.theillusivec4.curios.api.SlotContext;
-import top.theillusivec4.curios.api.client.ICurioRenderer;
 
-/** The same baked geometry is used in the inventory and on the wearer's forehead. */
+/** Curios renderer implementation with no Curios type in its class signature. */
 @EventBusSubscriber(modid = FlashlightMod.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
-public final class HeadbandRenderer implements ICurioRenderer {
+final class HeadbandRenderer {
     private static final ModelResourceLocation EMPTY = model("headband_empty");
     private static final ModelResourceLocation OFF = model("headband_loaded");
     private static final ModelResourceLocation ON = model("headband_loaded_on");
@@ -46,26 +46,40 @@ public final class HeadbandRenderer implements ICurioRenderer {
         event.register(ON);
     }
 
-    @Override
-    public <T extends LivingEntity, M extends EntityModel<T>> void render(
-        ItemStack stack, SlotContext context, PoseStack pose, RenderLayerParent<T, M> parent,
-        MultiBufferSource buffers, int light, float limbSwing, float limbSwingAmount,
-        float partialTicks, float age, float headYaw, float headPitch) {
+    static Object createProxy() {
+        try {
+            Class<?> renderer = Class.forName("top.theillusivec4.curios.api.client.ICurioRenderer");
+            HeadbandRenderer headband = new HeadbandRenderer();
+            InvocationHandler handler = (proxy, method, arguments) -> {
+                if (method.getName().equals("render")) {
+                    headband.render(arguments);
+                    return null;
+                }
+                if (method.isDefault()) return InvocationHandler.invokeDefault(proxy, method, arguments == null ? new Object[0] : arguments);
+                if (method.getName().equals("hashCode")) return System.identityHashCode(proxy);
+                if (method.getName().equals("equals")) return proxy == arguments[0];
+                return null;
+            };
+            return Proxy.newProxyInstance(renderer.getClassLoader(), new Class<?>[]{renderer}, handler);
+        } catch (ClassNotFoundException exception) {
+            throw new IllegalStateException("Curios renderer is unavailable", exception);
+        }
+    }
+
+    private void render(Object[] arguments) {
+        ItemStack stack = (ItemStack) arguments[0];
+        LivingEntity entity = (LivingEntity) invoke(arguments[1], "entity");
+        PoseStack pose = (PoseStack) arguments[2];
+        MultiBufferSource buffers = (MultiBufferSource) arguments[4];
+        int light = (int) arguments[5];
         ModelResourceLocation id = LampData.mounted(stack).isEmpty() ? EMPTY : LampData.enabled(stack) ? ON : OFF;
         Minecraft client = Minecraft.getInstance();
-        // Resolve from the current ModelManager, never cache a BakedModel across F3+T/reloads.
         BakedModel geometry = client.getModelManager().getModel(id);
         pose.pushPose();
         try {
-            // followHeadRotations copies the crouching head pivot as well as its rotation.
-            // An additional Curios sneak translation lowers the lamp onto the wearer's face.
-            ICurioRenderer.followHeadRotations(context.entity(), head);
-            if (!context.entity().getItemBySlot(EquipmentSlot.HEAD).isEmpty()) {
-                pose.scale(1.15F, 1.15F, 1.15F);
-            }
+            callCuriosRenderer("followHeadRotations", new Class<?>[]{LivingEntity.class, ModelPart[].class}, entity, new ModelPart[]{head});
+            if (!entity.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) pose.scale(1.15F, 1.15F, 1.15F);
             head.translateAndRotate(pose);
-            // Item Y points up; entity-model Y points down. A proper rotation (not a
-            // negative scale) preserves winding/normals and leaves the lens facing -Z.
             pose.mulPose(Axis.ZP.rotationDegrees(180));
             pose.translate(-0.5, -0.5, -0.5);
             for (BakedModel pass : geometry.getRenderPasses(stack, true)) {
@@ -76,6 +90,24 @@ public final class HeadbandRenderer implements ICurioRenderer {
             }
         } finally {
             pose.popPose();
+        }
+    }
+
+    private static void callCuriosRenderer(String name, Class<?>[] parameterTypes, Object... arguments) {
+        try {
+            Class<?> renderer = Class.forName("top.theillusivec4.curios.api.client.ICurioRenderer");
+            renderer.getMethod(name, parameterTypes).invoke(null, arguments);
+        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException exception) {
+            throw new IllegalStateException("Curios renderer call failed: " + name, exception);
+        }
+    }
+
+    private static Object invoke(Object target, String name) {
+        try {
+            Method method = target.getClass().getMethod(name);
+            return method.invoke(target);
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException exception) {
+            throw new IllegalStateException("Curios renderer context failed: " + name, exception);
         }
     }
 }

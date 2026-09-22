@@ -18,6 +18,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -47,6 +48,7 @@ public final class FlashlightMod {
         LampData.COMPONENTS.register(bus);
         container.registerConfig(ModConfig.Type.SERVER, FlashlightConfig.SPEC);
         bus.addListener(LampEnergy::register);
+        bus.addListener(CuriosCompatibility::setup);
         bus.addListener(FlashlightNetwork::register);
         bus.addListener(FlashlightMod::creativeItems);
         NeoForge.EVENT_BUS.addListener(FlashlightMod::commands);

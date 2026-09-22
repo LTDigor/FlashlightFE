@@ -2,13 +2,13 @@
 
 ![Flashlight FE icon](assets/icon.png)
 
-A Minecraft **1.21.1 / NeoForge** flashlight mod by **LTDigor**. Rechargeable handheld lights, hands-free Curios use and reversible headband mounting.
+A Minecraft **1.21.1 / NeoForge** flashlight mod by **LTDigor**. Rechargeable handheld lights and reversible headband mounting, with optional Curios support.
 
 [Download on CurseForge](https://www.curseforge.com/minecraft/mc-mods/flashlight-fe) · [GitHub releases](https://github.com/LTDigor/FlashlightFE/releases) · [Report an issue](https://github.com/LTDigor/FlashlightFE/issues)
 
 ## Install
 
-Install `flashlight-fe-1.0.4.jar` on both client and server, with NeoForge **21.1.249+** within 21.1 and Curios **9.5.1+** within version 9. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
+Install `flashlight-fe-1.0.4.jar` on both client and server, with NeoForge **21.1.249+** within 21.1. Curios **9.5.1+** within version 9 is optional. GeckoLib is not needed. JEI 19.18+ is optional; Immersive Engineering is supported through the standard FE item capability.
 
 This version uses the new `bestflashlight` namespace. It is **not a drop-in update** for the previous personal-use `flashlight` derivative: old items, helmet upgrades and configuration are not migrated. Test in a new world before changing an existing installation.
 
@@ -16,7 +16,7 @@ This version uses the new `bestflashlight` namespace. It is **not a drop-in upda
 
 - Craft a flashlight, then charge it in an FE item charger, such as Immersive Engineering's Charging Station. New lamps have no charge.
 - Hold the flashlight in either hand. Handheld flashlights cannot be equipped in Curios. Old equipped flashlights return through Curios' inventory handler, preserving their charge, name and components; a full inventory drops them beside the player. Other mods' slots and items are unchanged.
-- For a visible forehead mount, craft a headband from any wool and two strings. Combine it with a flashlight, then equip it in Curios' **head** slot. Armor helmets can be worn at the same time.
+- For a visible forehead mount, craft a headband from any wool and two strings. Combine it with a flashlight, then use it: with Curios it equips the default **head** Curios slot; without Curios it equips vanilla's head slot, replacing a helmet.
 - Craft the loaded headband alone to detach the flashlight. The empty headband is returned. Charge, custom names and other components survive both operations; attachment and removal turn the lamp off. A loaded headband can also be charged directly.
 - One enabled source emits per player: main hand, then offhand, then headband. Unequipped lamps do not consume power.
 - Creative players can use all lamp forms with zero or partial charge without changing stored FE. Switching to survival restores the charge requirement and normal drain on the next server tick; switching to creative stops drain immediately.
@@ -31,7 +31,7 @@ Two bindings appear under **Flashlight FE** in Minecraft Controls. Both accept k
 | Right mouse button, empty main hand, offhand flashlight | Toggle offhand flashlight |
 | Right mouse button, another item in main hand | Normal Minecraft use; offhand flashlight stays unchanged |
 | Handheld rebound to another key/button | Main flashlight first, otherwise offhand, even with another item in main hand |
-| Headband, default **I** | Toggle the headband in Curios `head`, independently of both hands |
+| Headband, default **I** | Toggle the equipped headband, independently of both hands |
 
 One physical press toggles once; holding does not repeat. Screens and chat ignore lamp input. Rebinding handheld away from the right mouse button removes its toggle action from that button. Server checks the actual inventory for each request.
 
@@ -48,7 +48,6 @@ In-game captures of the 1.0.4 industrial models.
 ![Flashlight in the left hand](assets/gallery/offhand-flashlight-left-arm.png)
 
 ![Native flashlight button animation](assets/gallery/flashlight-button-animation.gif)
-
 ## Configuration
 
 NeoForge uses `config/bestflashlight-server.toml` as the default server config. If `<world>/serverconfig/bestflashlight-server.toml` exists, that world-specific file overrides the global default. Server values are synchronized to clients and world-restart settings apply after restarting the world/server.

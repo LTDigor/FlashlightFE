@@ -19,7 +19,9 @@ repositories {
 }
 dependencies {
     compileOnly 'mezz.jei:jei-1.21.1-common-api:19.54.0.429'
-    implementation 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
+    compileOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
+    smokeImplementation 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
+    testRuntimeOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
     smokeImplementation 'curse.maven:immersive-engineering-231951:6733669'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -27,19 +29,22 @@ dependencies {
 neoForge {
     version = '21.1.249'
     addModdingDependenciesTo sourceSets.smoke
+    mods {
+        bestflashlight { sourceSet sourceSets.main }
+        bestflashlightSmoke { sourceSet sourceSets.main; sourceSet sourceSets.smoke }
+    }
     runs {
-        client { client() }
-        server { server(); programArgument '--nogui'; gameDirectory = file('run-server') }
-        gameTestServer { type = 'gameTestServer'; sourceSet = sourceSets.smoke; gameDirectory = file('run-gametest') }
-        clientSmoke { client(); sourceSet = sourceSets.smoke; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
-        clientReloadSmoke { client(); sourceSet = sourceSets.smoke; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; systemProperty 'bestflashlight.smoke.reload', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
-        multiplayerServer { server(); sourceSet = sourceSets.smoke; gameDirectory = file('run-multiplayer-server'); systemProperty 'bestflashlight.multiplayer.server', 'true'; programArgument '--nogui' }
-        multiplayerA { client(); sourceSet = sourceSets.smoke; gameDirectory = file('run-client-a'); systemProperty 'bestflashlight.multiplayer.client', 'true'; programArgument '--username'; programArgument 'FlashlightA' }
-        multiplayerB { client(); sourceSet = sourceSets.smoke; gameDirectory = file('run-client-b'); systemProperty 'bestflashlight.multiplayer.client', 'true'; programArgument '--username'; programArgument 'FlashlightB' }
+        client { client(); loadedMods = [mods.bestflashlight] }
+        server { server(); sourceSet = sourceSets.main; loadedMods = [mods.bestflashlight]; programArgument '--nogui'; gameDirectory = file('run-server') }
+        gameTestServer { type = 'gameTestServer'; sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-gametest') }
+        clientSmoke { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
+        clientReloadSmoke { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; systemProperty 'bestflashlight.smoke.reload', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
+        multiplayerServer { server(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-multiplayer-server'); systemProperty 'bestflashlight.multiplayer.server', 'true'; programArgument '--nogui' }
+        multiplayerA { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-a'); systemProperty 'bestflashlight.multiplayer.client', 'true'; programArgument '--username'; programArgument 'FlashlightA' }
+        multiplayerB { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-b'); systemProperty 'bestflashlight.multiplayer.client', 'true'; programArgument '--username'; programArgument 'FlashlightB' }
         configureEach { systemProperty 'neoforge.enabledGameTestNamespaces', 'bestflashlight'; logLevel = org.slf4j.event.Level.INFO }
     }
-    mods { bestflashlight { sourceSet sourceSets.main; sourceSet sourceSets.smoke } }
-    unitTest { enable(); testedMod = mods.bestflashlight }
+    unitTest { enable(); testedMod = mods.bestflashlightSmoke }
 }
 tasks.named('test', Test) { useJUnitPlatform() }
 
