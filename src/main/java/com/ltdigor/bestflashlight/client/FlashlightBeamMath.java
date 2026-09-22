@@ -1,13 +1,14 @@
 package com.ltdigor.bestflashlight.client;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
 /** Pure beam geometry kept separate from rendering so it can be unit-tested. */
 final class FlashlightBeamMath {
-    static final long NO_HIT_BLOCK = Long.MIN_VALUE;
-    private static final double MIN_CONE_RADIUS = 0.35;
-    private static final double HIT_EPSILON = 0.03;
+    private static final double MIN_CONE_RADIUS = 0.875;
+    // LDL's native held lights fade 15 levels over 7.75 blocks. A sub-block
+    // angular penumbra aliases into bright squares on the same block-centre grid.
+    private static final double LIGHT_FALLOFF = 15.0 / 7.75;
+    private static final double CORE_FRACTION = 0.68;
 
     private FlashlightBeamMath() {}
 
@@ -61,13 +62,6 @@ final class FlashlightBeamMath {
         return 1.0 - Math.pow(1.0 - factor, deltaSeconds * nominalFps);
     }
 
-    static Vec3 coneDirection(Vec3 axis, Vec3 right, Vec3 up, double yaw, double pitch) {
-        Vec3 direction = axis.normalize()
-            .add(right.normalize().scale(Math.tan(yaw)))
-            .add(up.normalize().scale(Math.tan(pitch)));
-        return direction.lengthSqr() < 1.0E-12 ? axis.normalize() : direction.normalize();
-    }
-
     static double halfAngleRadians(double fullAngleDegrees) {
         return Math.toRadians(Math.clamp(fullAngleDegrees, 1.0, 90.0) * 0.5);
     }
@@ -85,56 +79,29 @@ final class FlashlightBeamMath {
     static double coneLuminance(Vec3 origin, Vec3 axis, Vec3 point, double range, double halfAngle) {
         if (origin == null || axis == null || point == null || axis.lengthSqr() < 1.0E-12 || range <= 0.0) return 0.0;
 
-        Vec3 direction = axis.normalize();
         Vec3 delta = point.subtract(origin);
-        double forward = delta.dot(direction);
-        if (forward < 0.0 || forward > range) return 0.0;
-
-        double radialSquared = Math.max(0.0, delta.lengthSqr() - forward * forward);
-        double radial = Math.sqrt(radialSquared) / coneRadius(forward, halfAngle);
-        if (radial >= 1.0) return 0.0;
-
-        // Full intensity in the core, then a smooth edge instead of nine overlapping cylinders.
-        double edgeStart = 0.68;
-        double edgeFactor;
-        if (radial <= edgeStart) {
-            edgeFactor = 1.0;
-        } else {
-            double t = Math.clamp((radial - edgeStart) / (1.0 - edgeStart), 0.0, 1.0);
-            double smoothStep = t * t * (3.0 - 2.0 * t);
-            edgeFactor = 1.0 - smoothStep;
-        }
-
-        double distanceFactor = 1.0 - 0.30 * Math.clamp(forward / range, 0.0, 1.0);
-        return Math.clamp(15.0 * edgeFactor * distanceFactor, 0.0, 15.0);
+        return sampleLuminance(delta.x, delta.y, delta.z, axis.normalize(), range,
+            Math.tan(Math.clamp(halfAngle, Math.toRadians(0.5), Math.toRadians(45))));
     }
 
-    static int nearestConeSample(double x, double y, double[] sampleX, double[] sampleY) {
-        if (sampleX.length == 0 || sampleX.length != sampleY.length) {
-            throw new IllegalArgumentException("Cone sample arrays must be non-empty and equally sized");
-        }
-        int best = 0;
-        double bestDistance = Double.POSITIVE_INFINITY;
-        for (int i = 0; i < sampleX.length; i++) {
-            double dx = x - sampleX[i];
-            double dy = y - sampleY[i];
-            double distance = dx * dx + dy * dy;
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = i;
-            }
-        }
-        return best;
+    /** Allocation-free inner loop; axis is normalized and slope is tan(halfAngle). */
+    static double sampleLuminance(double x, double y, double z, Vec3 axis, double range, double slope) {
+        double forward = x * axis.x + y * axis.y + z * axis.z;
+        if (forward < 0 || forward > range || range <= 0) return 0;
+        double radialSquared = Math.max(0, x * x + y * y + z * z - forward * forward);
+        double coreRadius = CORE_FRACTION * Math.max(MIN_CONE_RADIUS, forward * slope);
+        double peak = 15.0 * (1.0 - 0.30 * forward / range);
+        double outerRadius = coreRadius + peak / LIGHT_FALLOFF;
+        if (radialSquared >= outerRadius * outerRadius) return 0;
+        double radialFalloff = Math.max(0, Math.sqrt(radialSquared) - coreRadius) * LIGHT_FALLOFF;
+        // Fade toward the range plane as well; crossing it must not drop a bright
+        // sample straight to zero during flight.
+        return Math.max(0, Math.min(peak - radialFalloff, (range - forward) * LIGHT_FALLOFF));
     }
 
-    /**
-     * A ray hit blocks light behind its collision surface, but the hit block itself
-     * must remain illuminated. This is what fixes the "flashlight turns off at a wall"
-     * case without pushing the light source through the wall.
-     */
-    static boolean visibleAtSample(BlockPos target, double distanceAlongSampleRay,
-                                   double hitDistance, long hitBlock) {
-        if (hitBlock != NO_HIT_BLOCK && target.asLong() == hitBlock) return true;
-        return distanceAlongSampleRay <= hitDistance + HIT_EPSILON;
+    /** Conservative radius including the native-light-like soft spill. */
+    static double illuminationRadius(double forward, double halfAngle) {
+        return CORE_FRACTION * coneRadius(forward, halfAngle) + 15.0 / LIGHT_FALLOFF;
     }
+
 }

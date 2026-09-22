@@ -26,6 +26,13 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+// Local real LDL fixture; optional and confined to the beam smoke launch.
+configurations { beamSmokeRuntime }
+if (providers.gradleProperty('beamSmokeModDir').isPresent()) {
+    dependencies.add('beamSmokeRuntime', fileTree(providers.gradleProperty('beamSmokeModDir').get()) {
+        include 'lambdynamiclights-*.jar'
+    })
+}
 neoForge {
     version = '21.1.249'
     addModdingDependenciesTo sourceSets.smoke
@@ -38,6 +45,14 @@ neoForge {
         server { server(); sourceSet = sourceSets.main; loadedMods = [mods.bestflashlight]; programArgument '--nogui'; gameDirectory = file('run-server') }
         gameTestServer { type = 'gameTestServer'; sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-gametest') }
         clientSmoke { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
+        beamClientSmoke {
+            client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]
+            gameDirectory = file('run-beam-smoke')
+            systemProperty 'bestflashlight.beamSmoke', 'true'
+            systemProperty 'bestflashlight.beamDiagnostics', 'true'
+            systemProperty 'bestflashlight.beamSmoke.baseline', providers.gradleProperty('beamSmokeBaseline').getOrElse('false')
+            programArgument '--username'; programArgument 'BeamSmoke'
+        }
         clientReloadSmoke { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; systemProperty 'bestflashlight.smoke.reload', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
         multiplayerServer { server(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-multiplayer-server'); systemProperty 'bestflashlight.multiplayer.server', 'true'; programArgument '--nogui' }
         multiplayerA { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-a'); systemProperty 'bestflashlight.multiplayer.client', 'true'; programArgument '--username'; programArgument 'FlashlightA' }
@@ -82,5 +97,30 @@ tasks.named('processResources', ProcessResources) {
     inputs.property 'mod_version', project.version
     filesMatching('META-INF/neoforge.mods.toml') {
         expand mod_version: project.version
+    }
+}
+
+// No user-instance files are changed. The isolated world and captures are ignored by Git.
+tasks.register('setupBeamSmoke') {
+    doLast {
+        if (configurations.beamSmokeRuntime.files.size() != 1) {
+            throw new GradleException('Set -PbeamSmokeModDir to a directory containing exactly one real lambdynamiclights-*.jar')
+        }
+        delete fileTree('run-beam-smoke/mods') { include 'lambdynamiclights-*.jar' }
+        copy { from configurations.beamSmokeRuntime; into file('run-beam-smoke/mods') }
+        def options = file('run-beam-smoke/options.txt')
+        options.parentFile.mkdirs()
+        options.text = 'onboardAccessibility:false\npauseOnLostFocus:false\nrenderDistance:6\nsimulationDistance:5\nmaxFps:120\n'
+    }
+}
+
+tasks.named('runBeamClientSmoke') { dependsOn 'setupBeamSmoke' }
+tasks.register('prepareBeamSmoke') {
+    dependsOn 'smokeClasses', 'prepareBeamClientSmokeRun', 'setupBeamSmoke'
+    doLast {
+        def javaPath = javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+        def runTask = tasks.named('runBeamClientSmoke').get()
+        def command = [javaPath, '-Xmx2G', '-cp', runTask.classpathProvider.asPath] + runTask.allJvmArgs + runTask.args
+        file('build/beamClientSmoke-command.json').text = groovy.json.JsonOutput.toJson(command)
     }
 }
