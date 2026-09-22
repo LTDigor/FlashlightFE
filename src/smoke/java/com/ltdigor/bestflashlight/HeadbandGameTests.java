@@ -7,6 +7,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Equipable;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.neoforged.neoforge.capabilities.Capabilities;
@@ -16,6 +17,15 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder("bestflashlight")
 @PrefixGameTestTemplate(false)
 public class HeadbandGameTests {
+    @GameTest(template = "empty")
+    public static void headbandUsesVanillaHeadEquipmentSlotWithoutCurios(GameTestHelper helper) {
+        ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get());
+        helper.assertTrue(band.getItem() instanceof Equipable, "Headband must be equipable without Curios");
+        helper.assertTrue(((Equipable) band.getItem()).getEquipmentSlot() == net.minecraft.world.entity.EquipmentSlot.HEAD,
+            "Headband must use vanilla head equipment slot without Curios");
+        helper.succeed();
+    }
+
     @GameTest(template = "empty")
     public static void assemblyChargingAndDisassemblyConserveLamp(GameTestHelper helper) {
         var level = helper.getLevel();

@@ -6,7 +6,6 @@ import java.util.UUID;
 import java.util.function.Predicate;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
-import top.theillusivec4.curios.api.CuriosApi;
 
 /** Shared source selection for input, beam origin and energy consumption. */
 public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) {
@@ -14,52 +13,20 @@ public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) 
 
     /** Recover legacy handheld Curios through Curios' own inventory/drop path once per login. */
     public static void returnInvalidFlashlights(LivingEntity entity) {
-        if (entity.level().isClientSide() || LEGACY_CHECKED.contains(entity.getUUID())) return;
-        CuriosApi.getCuriosInventory(entity).ifPresent(inventory -> {
-            LEGACY_CHECKED.add(entity.getUUID());
-            boolean changed = false;
-            for (var slot : inventory.getCurios().values()) {
-                for (var items : java.util.List.of(slot.getStacks(), slot.getCosmeticStacks())) {
-                    for (int i = 0; i < items.getSlots(); i++) {
-                        ItemStack stack = items.getStackInSlot(i);
-                        if (!FlashlightMod.isFlashlight(stack)) continue;
-                        items.setStackInSlot(i, ItemStack.EMPTY);
-                        inventory.loseInvalidStack(stack);
-                        changed = true;
-                    }
-                }
-            }
-            if (changed) inventory.handleInvalidStacks();
-        });
+        if (entity.level().isClientSide() || !LEGACY_CHECKED.add(entity.getUUID())) return;
+        CuriosCompatibility.returnInvalidFlashlights(entity);
     }
 
     public static ItemStack headband(LivingEntity entity) {
-        return CuriosApi.getCuriosInventory(entity).map(inventory -> {
-            var head = inventory.getCurios().get("head");
-            if (head == null) return ItemStack.EMPTY;
-            var items = head.getStacks();
-            ItemStack firstLoaded = ItemStack.EMPTY;
-            for (int i = 0; i < items.getSlots(); i++) {
-                ItemStack stack = items.getStackInSlot(i);
-                if (!(stack.getItem() instanceof HeadbandItem) || LampData.mounted(stack).isEmpty()) continue;
-                if (firstLoaded.isEmpty()) firstLoaded = stack;
-                if (LampData.enabled(stack)) return stack;
-            }
-            return firstLoaded;
-        }).orElse(ItemStack.EMPTY);
+        var headbands = CuriosCompatibility.headbands(entity);
+        for (ItemStack stack : headbands) {
+            if (LampData.enabled(stack)) return stack;
+        }
+        return headbands.stream().findFirst().orElse(ItemStack.EMPTY);
     }
 
     public static ItemStack headband(LivingEntity entity, int slotIndex) {
-        return CuriosApi.getCuriosInventory(entity).map(inventory -> {
-            var head = inventory.getCurios().get("head");
-            if (head == null) return ItemStack.EMPTY;
-            var items = head.getStacks();
-            if (slotIndex < 0 || slotIndex >= items.getSlots()) return ItemStack.EMPTY;
-            ItemStack stack = items.getStackInSlot(slotIndex);
-            return stack.getItem() instanceof HeadbandItem && !LampData.mounted(stack).isEmpty()
-                ? stack
-                : ItemStack.EMPTY;
-        }).orElse(ItemStack.EMPTY);
+        return CuriosCompatibility.headband(entity, slotIndex);
     }
 
     public static LampSource select(LivingEntity entity) {
@@ -83,27 +50,12 @@ public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) 
             LampSource source = new LampSource(off, false, true);
             if (usable.test(source)) return source;
         }
-        LampSource headband = selectHeadband(entity, usable);
-        if (headband != null) return headband;
+        for (ItemStack band : CuriosCompatibility.headbands(entity)) {
+            if (!LampData.enabled(band)) continue;
+            LampSource source = new LampSource(band, true, false);
+            if (usable.test(source)) return source;
+        }
         return null;
-    }
-
-    private static LampSource selectHeadband(LivingEntity entity, Predicate<LampSource> usable) {
-        return CuriosApi.getCuriosInventory(entity).map(inventory -> {
-            var head = inventory.getCurios().get("head");
-            if (head == null) return null;
-            var items = head.getStacks();
-            for (int i = 0; i < items.getSlots(); i++) {
-                ItemStack band = items.getStackInSlot(i);
-                if (!(band.getItem() instanceof HeadbandItem) || LampData.mounted(band).isEmpty()
-                    || !LampData.enabled(band)) {
-                    continue;
-                }
-                LampSource source = new LampSource(band, true, false);
-                if (usable.test(source)) return source;
-            }
-            return null;
-        }).orElse(null);
     }
 
     static void resetLegacyCheck(UUID player) {

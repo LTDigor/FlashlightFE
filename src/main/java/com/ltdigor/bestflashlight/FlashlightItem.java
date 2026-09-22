@@ -4,8 +4,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 /** Item state persists in components; the client renderer owns transient button motion. */
-public final class FlashlightItem extends Item implements top.theillusivec4.curios.api.type.capability.ICurioItem {
-    @Override public boolean canEquip(top.theillusivec4.curios.api.SlotContext context, ItemStack stack) { return false; }
+public final class FlashlightItem extends Item {
     public FlashlightItem(Properties properties) {
         super(properties.stacksTo(1));
     }

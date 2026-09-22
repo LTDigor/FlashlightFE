@@ -1,6 +1,7 @@
 package com.ltdigor.bestflashlight.client;
 
 import com.ltdigor.bestflashlight.FlashlightConfig;
+import com.ltdigor.bestflashlight.CuriosCompatibility;
 import com.ltdigor.bestflashlight.FlashlightMod;
 import com.ltdigor.bestflashlight.LampData;
 import com.ltdigor.bestflashlight.LampEnergy;
@@ -24,7 +25,6 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 import org.lwjgl.glfw.GLFW;
-import top.theillusivec4.curios.api.client.CuriosRendererRegistry;
 
 @EventBusSubscriber(modid = FlashlightMod.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
 public final class FlashlightClientEvents {
@@ -51,7 +51,7 @@ public final class FlashlightClientEvents {
                 (stack, level, entity, seed) -> LampData.mounted(stack).isEmpty() ? 0 : 1);
             ItemProperties.register(FlashlightMod.HEADBAND.get(), FlashlightMod.resource("enabled"),
                 (stack, level, entity, seed) -> LampData.enabled(stack) ? 1 : 0);
-            CuriosRendererRegistry.register(FlashlightMod.HEADBAND.get(), HeadbandRenderer::new);
+            if (CuriosCompatibility.isLoaded()) CuriosClientCompatibility.registerRenderer();
         });
         NeoForge.EVENT_BUS.addListener(FlashlightClientEvents::tick);
         NeoForge.EVENT_BUS.addListener(FlashlightClientEvents::key);
