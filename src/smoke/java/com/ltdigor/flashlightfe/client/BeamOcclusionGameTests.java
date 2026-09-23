@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight.client;
+package com.ltdigor.flashlightfe.client;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;

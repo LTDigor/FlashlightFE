@@ -1,5 +1,6 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
+import com.ltdigor.flashlightfe.lighting.ServerBeamLightingManager;
 import com.mojang.authlib.GameProfile;
 import java.util.UUID;
 import net.minecraft.core.component.DataComponents;
@@ -36,7 +37,8 @@ public class CuriosRestrictionGameTests {
             head.getStacks().setStackInSlot(0, namedLamp("Functional survivor", 123));
             head.getCosmeticStacks().setStackInSlot(0, namedLamp("Cosmetic survivor", 456));
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
 
             helper.assertTrue(head.getStacks().getStackInSlot(0).isEmpty(), "Ordinary flashlight must leave functional Curios slot");
             helper.assertTrue(head.getCosmeticStacks().getStackInSlot(0).isEmpty(), "Ordinary flashlight must leave cosmetic Curios slot");
@@ -58,7 +60,8 @@ public class CuriosRestrictionGameTests {
             head.getStacks().setStackInSlot(0, namedLamp("Dropped survivor", 789));
             head.getCosmeticStacks().setStackInSlot(0, new ItemStack(Items.STONE, 7));
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
 
             helper.assertTrue(head.getStacks().getStackInSlot(0).isEmpty(), "Invalid flashlight must be cleared before fallback");
             ItemStack retained = head.getCosmeticStacks().getStackInSlot(0);

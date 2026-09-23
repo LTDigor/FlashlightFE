@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -27,12 +27,12 @@ class OptionalCuriosClassloadingTest {
         try (URLClassLoader loader = new URLClassLoader(classpathWithoutCurios, null)) {
             assertThrows(ClassNotFoundException.class,
                 () -> Class.forName("top.theillusivec4.curios.api.CuriosApi", false, loader));
-            assertDoesNotThrow(() -> Class.forName("com.ltdigor.bestflashlight.CuriosCompatibility", true, loader));
-            assertDoesNotThrow(() -> Class.forName("com.ltdigor.bestflashlight.FlashlightItem", true, loader));
-            assertDoesNotThrow(() -> Class.forName("com.ltdigor.bestflashlight.HeadbandItem", true, loader));
-            assertDoesNotThrow(() -> Class.forName("com.ltdigor.bestflashlight.LampSource", true, loader));
-            assertDoesNotThrow(() -> Class.forName("com.ltdigor.bestflashlight.mixin.CuriosCommonEventsMixin", true, loader));
-            assertDoesNotThrow(() -> Class.forName("com.ltdigor.bestflashlight.mixin.BestFlashlightMixinPlugin", true, loader));
+            assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.CuriosCompatibility", true, loader));
+            assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.FlashlightItem", true, loader));
+            assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.HeadbandItem", true, loader));
+            assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.LampSource", true, loader));
+            assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.mixin.CuriosCommonEventsMixin", true, loader));
+            assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.mixin.BestFlashlightMixinPlugin", true, loader));
         } catch (java.io.IOException exception) {
             throw new AssertionError(exception);
         }

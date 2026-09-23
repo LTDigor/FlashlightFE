@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight.client;
+package com.ltdigor.flashlightfe.client;
 
 import dev.lambdaurora.lambdynlights.api.behavior.DynamicLightBehavior;
 import java.lang.reflect.Field;

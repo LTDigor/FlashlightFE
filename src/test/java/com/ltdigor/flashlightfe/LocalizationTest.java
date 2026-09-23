@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;

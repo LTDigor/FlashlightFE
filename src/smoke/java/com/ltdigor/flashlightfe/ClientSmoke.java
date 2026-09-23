@@ -1,4 +1,6 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
+
+import com.ltdigor.flashlightfe.lighting.TransientLightBlock;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.logging.LogUtils;
@@ -38,8 +40,8 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import com.ltdigor.bestflashlight.client.ButtonAnimation;
-import com.ltdigor.bestflashlight.client.FlashlightClientEvents;
+import com.ltdigor.flashlightfe.client.ButtonAnimation;
+import com.ltdigor.flashlightfe.client.FlashlightClientEvents;
 import org.lwjgl.glfw.GLFW;
 import top.theillusivec4.curios.api.CuriosApi;
 import top.theillusivec4.curios.api.client.CuriosRendererRegistry;
@@ -430,7 +432,7 @@ public final class ClientSmoke {
                 var level = player.serverLevel();
                 for (var direction : net.minecraft.core.Direction.values())
                     level.setBlock(WATER_ORPHAN.relative(direction), Blocks.STONE.defaultBlockState(), 3);
-                level.setBlock(WATER_ORPHAN, FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState().setValue(FlashlightLightBlock.WATERLOGGED, true), 3);
+                level.setBlock(WATER_ORPHAN, FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState().setValue(TransientLightBlock.WATERLOGGED, true), 3);
                 level.setBlock(DRY_ORPHAN, FlashlightMod.FLASHLIGHT_LIGHT.get().defaultBlockState(), 3);
                 try { Files.writeString(marker(mc), worldName + "\n" + savedEnergy + "\n"); }
                 catch (IOException e) { throw new AssertionError(e); }

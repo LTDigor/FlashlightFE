@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;

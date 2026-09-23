@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

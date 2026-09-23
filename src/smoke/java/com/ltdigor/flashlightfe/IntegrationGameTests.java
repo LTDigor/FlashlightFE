@@ -1,9 +1,9 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
-import com.ltdigor.bestflashlight.mixin.AbstractContainerMenuAccessor;
+import com.ltdigor.flashlightfe.lighting.ServerBeamLightingManager;
+import com.ltdigor.flashlightfe.mixin.AbstractContainerMenuAccessor;
 import blusunrize.immersiveengineering.common.blocks.metal.ChargingStationBlockEntity;
 import blusunrize.immersiveengineering.common.register.IEBlocks;
-import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -58,16 +58,20 @@ public class IntegrationGameTests {
             ItemStack main = lamp(3), off = lamp(20);
             LampData.setEnabled(main, true); LampData.setEnabled(off, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, main); player.setItemSlot(EquipmentSlot.OFFHAND, off);
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(main) == 2 && LampEnergy.stored(off) == 20, "One emitting source consumes exactly one FE");
             LampData.setEnabled(main, false);
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(main) == 2 && LampEnergy.stored(off) == 19, "Disabled primary permits offhand beam");
             player.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY); player.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(off) == 19, "Unequipped lamp has no idle consumption");
             main = lamp(1); LampData.setEnabled(main, true); player.setItemSlot(EquipmentSlot.MAINHAND, main);
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(main) == 0 && !LampData.enabled(main),
                 "Final affordable FE tick must leave the lamp off immediately without negative charge");
         } finally { remove(helper, player); }
@@ -127,7 +131,8 @@ public class IntegrationGameTests {
             LampData.setEnabled(lamp, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(beamCache(player.getUUID()) != null,
                 "Emitting player must own a server beam cache");
 
@@ -141,9 +146,13 @@ public class IntegrationGameTests {
             helper.assertTrue(carrier != null, "Beam must place at least one temporary carrier");
 
             helper.getLevel().setBlock(carrier, Blocks.STONE.defaultBlockState(), 3);
+            ServerBeamLightingManager.get()
+                .endServerTick(helper.getLevel().getServer());
 
-            helper.assertTrue(beamCache(player.getUUID()) == null,
-                "Replacing an owned carrier must invalidate the owner's cached beam immediately");
+            helper.assertTrue(helper.getLevel().getBlockState(carrier).is(Blocks.STONE),
+                "An externally placed solid block must never be overwritten by the beam");
+            helper.assertTrue(beamCache(player.getUUID()) != null,
+                "The beam keeps requesting the cell until tracing stops seeing it");
         } finally { remove(helper, player); }
         helper.succeed();
     }
@@ -162,12 +171,14 @@ public class IntegrationGameTests {
             LampData.setEnabled(lamp, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             Object firstCache = beamCache(player.getUUID());
             helper.assertTrue(firstCache != null && LampEnergy.stored(lamp) == 19,
                 "First emitting tick must build beam cache and consume FE");
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             Object secondCache = beamCache(player.getUUID());
             helper.assertTrue(firstCache == secondCache,
                 "Static second tick must reuse cached server beam geometry");
@@ -175,7 +186,8 @@ public class IntegrationGameTests {
                 "Reusing beam geometry must still consume FE every tick");
 
             player.setPos(player.getX() + 0.25, player.getY(), player.getZ());
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             Object movedCache = beamCache(player.getUUID());
             helper.assertTrue(movedCache != null && movedCache != secondCache,
                 "Player movement must invalidate cached beam geometry immediately");
@@ -198,7 +210,8 @@ public class IntegrationGameTests {
             LampData.setEnabled(band, true); head.getStacks().setStackInSlot(0, band);
             player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
             helper.assertTrue(LampSource.select(player).headMounted() && LampSource.toggleTarget(player).equals("headband"), "Free hands must select forehead lamp");
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(head.getStacks().getStackInSlot(0)) == 49, "Curios battery drains once per emitting tick");
             player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(net.minecraft.world.item.Items.DIAMOND_HELMET));
             helper.assertTrue(LampSource.select(player).stack().getItem() instanceof HeadbandItem, "Armor helmet must coexist with band");
@@ -222,7 +235,8 @@ public class IntegrationGameTests {
             player.setItemSlot(EquipmentSlot.MAINHAND, main);
             player.setItemSlot(EquipmentSlot.OFFHAND, off);
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
 
             helper.assertTrue(!LampData.enabled(main),
                 "An empty higher-priority source must switch itself off");
@@ -257,7 +271,8 @@ public class IntegrationGameTests {
 
             FlashlightConfig.WORKS_UNDERWATER.set(false);
             FlashlightConfig.WORKS_UNDERWATER.clearCache();
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
 
             helper.assertTrue(LampEnergy.stored(main) == 10,
                 "A submerged handheld skipped by config must not consume FE");
@@ -283,10 +298,12 @@ public class IntegrationGameTests {
             for (int x=6;x<=10;x++) for(int y=1;y<=4;y++) for(int z=1;z<=6;z++) helper.setBlock(x,y,z,Blocks.WATER);
             ItemStack item = lamp(100); LampData.setEnabled(item,true); player.setItemSlot(EquipmentSlot.MAINHAND,item);
             FlashlightConfig.WORKS_UNDERWATER.set(false); FlashlightConfig.WORKS_UNDERWATER.clearCache();
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(item)==100, "Disabled underwater light must not consume");
             FlashlightConfig.WORKS_UNDERWATER.set(true); FlashlightConfig.WORKS_UNDERWATER.clearCache();
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(item)==99, "Enabled underwater light consumes normally");
             FlashlightConfig.ENERGY_PER_TICK.set(0.0); FlashlightConfig.ENERGY_PER_TICK.clearCache();
             ItemStack empty=lamp(0); LampData.setEnabled(empty,true);
@@ -309,11 +326,13 @@ public class IntegrationGameTests {
             player.setPos(helper.absolutePos(new BlockPos(8,1,3)).getCenter());
             ItemStack lamp=lamp(100); LampData.setEnabled(lamp,true); player.setItemSlot(EquipmentSlot.MAINHAND,lamp);
             for (int reason=0;reason<3;reason++) {
-                FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
                 helper.assertTrue(lightCount(helper)>0,"Tick must create actual light blocks");
-                if(reason==0) FlashlightEvents.onLivingDeath(new LivingDeathEvent(player,helper.getLevel().damageSources().generic()));
-                if(reason==1) FlashlightEvents.onPlayerChangedDimension(new PlayerEvent.PlayerChangedDimensionEvent(player,Level.OVERWORLD,Level.NETHER));
-                if(reason==2) FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+                if(reason==0) FlashlightServerEvents.onLivingDeath(new LivingDeathEvent(player,helper.getLevel().damageSources().generic()));
+                if(reason==1) FlashlightServerEvents.onPlayerChangedDimension(new PlayerEvent.PlayerChangedDimensionEvent(player,Level.OVERWORLD,Level.NETHER));
+                if(reason==2) FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+                ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
                 helper.assertTrue(lightCount(helper)==0,"Lifecycle event must remove the player's lights");
             }
         } finally { remove(helper,player); }
@@ -341,7 +360,8 @@ public class IntegrationGameTests {
             player.setYRot(0); player.setXRot(0);
             ItemStack lamp = lamp(50); LampData.setEnabled(lamp, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(lamp) == 49,
                 "A nearby partial collision must clip the beam without switching the flashlight off");
             boolean cameraSideLight = false;
@@ -382,7 +402,8 @@ public class IntegrationGameTests {
             LampData.setEnabled(lamp, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
 
             boolean openSideLight = false;
             int paneZ = 4;
@@ -418,7 +439,8 @@ public class IntegrationGameTests {
             ItemStack lamp = lamp(50); LampData.setEnabled(lamp, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
 
             for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 2)) {
                 helper.assertTrue(!helper.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
@@ -428,15 +450,9 @@ public class IntegrationGameTests {
         helper.succeed();
     }
 
-    @SuppressWarnings("unchecked")
+
     private static Object beamCache(UUID player) {
-        try {
-            Field field = FlashlightEvents.class.getDeclaredField("BEAM_CACHE");
-            field.setAccessible(true);
-            return ((Map<UUID, Object>) field.get(null)).get(player);
-        } catch (ReflectiveOperationException exception) {
-            throw new AssertionError("Could not inspect server beam cache", exception);
-        }
+        return ServerBeamLightingManager.get().playerFrame(player);
     }
 
     private static ItemStack lamp(int energy) {
@@ -449,7 +465,9 @@ public class IntegrationGameTests {
         FlashlightConfig.ENERGY_PER_TICK.clearCache();
     }
     private static void remove(GameTestHelper helper,ServerPlayer player) {
-        FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+        FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+        ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+        ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
         player.discard();
     }
 }

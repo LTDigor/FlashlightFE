@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
 import com.mojang.authlib.GameProfile;
 import java.util.UUID;

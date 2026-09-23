@@ -1,4 +1,7 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
+
+import com.ltdigor.flashlightfe.lighting.ServerBeamLightingManager;
+import com.ltdigor.flashlightfe.lighting.TransientLightBlock;
 
 import com.mojang.authlib.GameProfile;
 import java.util.UUID;
@@ -39,14 +42,17 @@ public class WallAndHeadlampRegressionGameTests {
             LampData.setEnabled(lamp, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
 
             helper.assertTrue(LampEnergy.stored(lamp) == 19,
                 "A nearby wall must clip the beam, not switch the handheld flashlight off");
             helper.assertTrue(countTemporaryLights(helper) > 0,
                 "A wall-overlapping handheld emitter must keep at least one temporary light source");
         } finally {
-            FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             player.discard();
         }
         helper.succeed();
@@ -73,7 +79,8 @@ public class WallAndHeadlampRegressionGameTests {
             helper.assertTrue(head.getStacks().insertItem(0, band, false).isEmpty(),
                 "Loaded headband must equip into the Curios head slot");
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
 
             Vec3 eye = player.getEyePosition();
             Vec3 look = player.getLookAngle().normalize();
@@ -87,7 +94,9 @@ public class WallAndHeadlampRegressionGameTests {
             helper.assertTrue(maxTemporaryLightLevel(helper) == 15,
                 "Far forward headlamp terminals must remain bright enough to illuminate the target");
         } finally {
-            FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             player.discard();
         }
         helper.succeed();
@@ -117,7 +126,8 @@ public class WallAndHeadlampRegressionGameTests {
                 "Loaded headband must equip into the Curios head slot");
             ItemStack equipped = head.getStacks().getStackInSlot(0);
 
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
 
             helper.assertTrue(LampEnergy.stored(equipped) == 19,
                 "Looking into a nearby wall must keep the headlamp running");
@@ -126,7 +136,9 @@ public class WallAndHeadlampRegressionGameTests {
             helper.assertTrue(maxTemporaryLightLevel(helper) <= 4,
                 "Close-wall fallback must stay dim enough not to recreate a 360-degree halo");
         } finally {
-            FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             player.discard();
         }
         helper.succeed();
@@ -156,7 +168,7 @@ public class WallAndHeadlampRegressionGameTests {
         for (BlockPos pos : BlockPos.betweenClosed(0, 0, 0, 15, 7, 15)) {
             var state = helper.getBlockState(pos);
             if (state.is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
-                max = Math.max(max, state.getValue(FlashlightLightBlock.LEVEL));
+                max = Math.max(max, state.getValue(TransientLightBlock.LEVEL));
             }
         }
         return max;

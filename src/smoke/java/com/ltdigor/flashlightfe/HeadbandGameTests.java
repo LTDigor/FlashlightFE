@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
 import java.util.List;
 import net.minecraft.core.component.DataComponents;

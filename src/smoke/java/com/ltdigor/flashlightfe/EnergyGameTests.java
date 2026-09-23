@@ -1,5 +1,6 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
+import com.ltdigor.flashlightfe.lighting.ServerBeamLightingManager;
 import com.mojang.authlib.GameProfile;
 import java.util.List;
 import java.util.UUID;
@@ -49,7 +50,8 @@ public class EnergyGameTests {
                 }
                 toggle(player, target);
                 helper.assertTrue(LampData.enabled(lamp), "Creative command must enable every empty lamp type");
-                FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
                 helper.assertTrue(LampData.enabled(lamp) && LampEnergy.stored(lamp) == 0,
                     "Creative empty lamp must emit without charge or forced shutoff");
                 helper.assertTrue(LampSource.select(player) != null,
@@ -59,12 +61,14 @@ public class EnergyGameTests {
                 helper.assertTrue(!LampData.enabled(lamp), "Creative command must switch every lamp type off");
                 lamp.getCapability(Capabilities.EnergyStorage.ITEM).receiveEnergy(37, false);
                 toggle(player, target);
-                FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
                 helper.assertTrue(LampEnergy.stored(lamp) == 37,
                     "Creative emission must preserve partial FE for every lamp type");
                 helper.assertTrue(hasLight(helper), "Creative partially charged lamp must create actual light blocks");
                 toggle(player, target);
-                FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
                 helper.assertTrue(!hasLight(helper), "Disabled creative lamp must remove its light before next lamp fixture");
                 clearEquipment(player);
             }
@@ -73,18 +77,23 @@ public class EnergyGameTests {
             player.setItemSlot(EquipmentSlot.MAINHAND, main);
             player.setItemSlot(EquipmentSlot.OFFHAND, off);
             toggle(player, "main");
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(main) == 37, "Creative main-hand emission must preserve partial FE");
             toggle(player, "main");
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(!hasLight(helper), "Disabled main-hand lamp must remove light before offhand fixture");
             player.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
             toggle(player, "off");
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampData.enabled(off) && LampEnergy.stored(off) == 0,
                 "Creative offhand command must enable and emit with zero FE");
         } finally {
-            FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             player.discard();
         }
         helper.succeed();
@@ -98,27 +107,34 @@ public class EnergyGameTests {
         try {
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
             toggle(player, "main");
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(lamp) == 2, "Creative emission must preserve FE");
             player.setGameMode(GameType.SURVIVAL);
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(lamp) == 1 && LampData.enabled(lamp),
                 "Changing to survival must immediately restore FE drain");
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(lamp) == 0 && !LampData.enabled(lamp),
                 "Last available survival FE must power the current tick and switch the lamp off for the next one");
 
             ItemStack transitioning = lamp(2);
             player.setItemSlot(EquipmentSlot.MAINHAND, transitioning);
             toggle(player, "main");
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(transitioning) == 1, "Survival fixture must drain before mode change");
             player.setGameMode(GameType.CREATIVE);
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(transitioning) == 1 && LampData.enabled(transitioning),
                 "Changing to creative must immediately stop FE drain without disabling the lamp");
         } finally {
-            FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             player.discard();
         }
         helper.succeed();
@@ -136,7 +152,8 @@ public class EnergyGameTests {
             LampData.setEnabled(lamp, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
             helper.onEachTick(() -> {
-                FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+                ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
                 emittedTicks[0]++;
                 if (emittedTicks[0] == 40) {
                     helper.assertTrue(LampEnergy.stored(lamp) == 1 && LampData.enabled(lamp) && hasLight(helper),
@@ -147,7 +164,9 @@ public class EnergyGameTests {
                         "The last FE must switch the fractional lamp off after another 40 ticks");
                     FlashlightConfig.ENERGY_PER_TICK.set(previous);
                     FlashlightConfig.ENERGY_PER_TICK.clearCache();
-                    FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+                    FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+                    ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+                    ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
                     player.discard();
                     helper.succeed();
                 }
@@ -155,7 +174,9 @@ public class EnergyGameTests {
         } catch (RuntimeException exception) {
             FlashlightConfig.ENERGY_PER_TICK.set(previous);
             FlashlightConfig.ENERGY_PER_TICK.clearCache();
-            FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             player.discard();
             throw exception;
         }
@@ -171,13 +192,16 @@ public class EnergyGameTests {
             ItemStack empty = lamp(0);
             player.setItemSlot(EquipmentSlot.MAINHAND, empty);
             toggle(player, "main");
-            FlashlightEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampData.enabled(empty) && LampSource.select(player) != null && LampEnergy.stored(empty) == 0,
                 "Creative lamp must bypass an FE cost greater than battery capacity");
         } finally {
             FlashlightConfig.ENERGY_PER_TICK.set(previous);
             FlashlightConfig.ENERGY_PER_TICK.clearCache();
-            FlashlightEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+            ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             player.discard();
         }
         helper.succeed();

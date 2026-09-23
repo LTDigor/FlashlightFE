@@ -1,7 +1,7 @@
-package com.ltdigor.bestflashlight;
+package com.ltdigor.flashlightfe;
 
 import com.mojang.logging.LogUtils;
-import com.ltdigor.bestflashlight.client.ButtonAnimation;
+import com.ltdigor.flashlightfe.client.ButtonAnimation;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;

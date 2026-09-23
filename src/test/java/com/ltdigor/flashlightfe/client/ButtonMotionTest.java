@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight.client;
+package com.ltdigor.flashlightfe.client;
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;

@@ -1,4 +1,4 @@
-package com.ltdigor.bestflashlight.client;
+package com.ltdigor.flashlightfe.client;
 
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;

@@ -1,8 +1,8 @@
-package com.ltdigor.bestflashlight.client;
+package com.ltdigor.flashlightfe.client;
 
-import com.ltdigor.bestflashlight.FlashlightConfig;
-import com.ltdigor.bestflashlight.FlashlightMod;
-import com.ltdigor.bestflashlight.LampData;
+import com.ltdigor.flashlightfe.FlashlightConfig;
+import com.ltdigor.flashlightfe.FlashlightMod;
+import com.ltdigor.flashlightfe.LampData;
 import com.mojang.logging.LogUtils;
 import com.mojang.authlib.GameProfile;
 import java.util.UUID;
