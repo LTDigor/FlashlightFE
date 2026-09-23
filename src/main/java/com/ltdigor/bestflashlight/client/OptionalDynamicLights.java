@@ -9,7 +9,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -36,8 +35,8 @@ import org.slf4j.Logger;
  * Optional client-only bridge to LambDynamicLights.
  *
  * LDL polls occlusion/chunk work from its client-tick pipeline, so expensive world
- * probes stay tick-driven and cached. Beam pose and smoothing are updated every render
- * frame without raycasts, avoiding 20 TPS aiming/origin stepping at high frame rates.
+ * probes stay tick-driven and cached. Frames update only the aiming target; geometry,
+ * bounds and light values are published together after all visibility checks finish.
  *
  * When every connected client reports a compatible, enabled LDL bridge, the server
  * disables its temporary block-light beam. This bridge then renders one cone for each
@@ -49,28 +48,10 @@ final class OptionalDynamicLights {
     private static final double NOMINAL_SMOOTHING = 0.38;
     private static final double NOMINAL_FPS = 60.0;
     private static final int STATIC_OCCLUSION_REFRESH_TICKS = 4;
-    private static final double OCCLUSION_POSITION_EPSILON_SQR = 0.01 * 0.01;
-    private static final double OCCLUSION_DIRECTION_DOT = Math.cos(Math.toRadians(0.20));
-    private static final double DIAGONAL = Math.sqrt(0.5);
-
-    // Centre, outer cardinal/diagonal ring, and a half-radius ring. Seventeen
-    // probes close the largest gaps of the old sparse pattern; tick-driven updates
-    // plus the bounded static cache stay far cheaper than per-render-frame probing.
-    private static final double[] SAMPLE_X = {
-        0.0,
-        1.0, -1.0, 0.0, 0.0, DIAGONAL, -DIAGONAL, DIAGONAL, -DIAGONAL,
-        0.5, -0.5, 0.0, 0.0, 0.5 * DIAGONAL, -0.5 * DIAGONAL, 0.5 * DIAGONAL, -0.5 * DIAGONAL
-    };
-    private static final double[] SAMPLE_Y = {
-        0.0,
-        0.0, 0.0, 1.0, -1.0, DIAGONAL, DIAGONAL, -DIAGONAL, -DIAGONAL,
-        0.0, 0.0, 0.5, -0.5, 0.5 * DIAGONAL, 0.5 * DIAGONAL, -0.5 * DIAGONAL, -0.5 * DIAGONAL
-    };
-
     private static final Map<UUID, DynamicCone> CONES = new HashMap<>();
 
     private static boolean initialized;
-    private static boolean available;
+    private static volatile boolean available;
     private static boolean serverFallbackEnabled = true;
     private static int fallbackGraceTicks;
     private static Object manager;
@@ -468,19 +449,17 @@ final class OptionalDynamicLights {
         private final ConeState state;
         private final Object behavior;
         private Vec3 smoothDirection;
-        private Vec3 lastProbeStart;
-        private Vec3 lastProbeAxis;
-        private double lastProbeRange = Double.NaN;
-        private double lastProbeHalfAngle = Double.NaN;
-        private double[] hitDistances;
-        private long[] hitBlocks;
-        private int ticksSinceProbe = STATIC_OCCLUSION_REFRESH_TICKS;
+        private BeamSnapshot lastBuilt;
+        private int ticksSinceBuild = STATIC_OCCLUSION_REFRESH_TICKS;
         private boolean headMounted;
         private boolean offHand;
         private boolean useEmitter;
-        private Vec3 basisRight = new Vec3(1.0, 0.0, 0.0);
-        private boolean geometryInitialized;
         private boolean added;
+        // Read by the development smoke fixture, never logged in normal play.
+        private long lastBuildNanos;
+        private long lastBuildSequence;
+        private int lastTraceCount;
+        private int lastSampleCount;
 
         private DynamicCone(ConeState state, Object behavior) {
             this.state = state;
@@ -499,48 +478,18 @@ final class OptionalDynamicLights {
                 smoothDirection = target.normalize();
             }
             Vec3 axis = smoothDirection.normalize();
-            Vec3 right = rightVector(axis, basisRight);
-            basisRight = right;
-            Vec3 up = right.cross(axis).normalize();
-
-            boolean refreshOcclusion = hitDistances == null || hitBlocks == null
-                || lastProbeStart == null || lastProbeAxis == null
-                || lastProbeStart.distanceToSqr(start) > OCCLUSION_POSITION_EPSILON_SQR
-                || lastProbeAxis.dot(axis) < OCCLUSION_DIRECTION_DOT
-                || Double.compare(lastProbeRange, range) != 0
-                || Double.compare(lastProbeHalfAngle, halfAngle) != 0
-                || ticksSinceProbe >= STATIC_OCCLUSION_REFRESH_TICKS;
-
-            if (refreshOcclusion) {
-                hitDistances = new double[SAMPLE_X.length];
-                hitBlocks = new long[SAMPLE_X.length];
-                Arrays.fill(hitBlocks, FlashlightBeamMath.NO_HIT_BLOCK);
-                for (int i = 0; i < SAMPLE_X.length; i++) {
-                    Vec3 rayDirection = FlashlightBeamMath.coneDirection(
-                        axis, right, up, halfAngle * SAMPLE_X[i], halfAngle * SAMPLE_Y[i]);
-                    Vec3 requestedEnd = start.add(rayDirection.scale(range));
-                    BlockHitResult hit = level.clip(new ClipContext(
-                        start, requestedEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
-                    if (hit.getType() == HitResult.Type.MISS) {
-                        hitDistances[i] = range;
-                    } else {
-                        hitDistances[i] = Math.max(0.0, start.distanceTo(hit.getLocation()));
-                        hitBlocks[i] = hit.getBlockPos().asLong();
-                    }
-                }
-                lastProbeStart = start;
-                lastProbeAxis = axis;
-                lastProbeRange = range;
-                lastProbeHalfAngle = halfAngle;
-                ticksSinceProbe = 0;
-                state.updateOcclusion(hitDistances, hitBlocks);
-            } else {
-                ticksSinceProbe++;
-            }
-
-            if (!geometryInitialized) {
-                state.updateGeometry(start, axis, right, up, range, halfAngle);
-                geometryInitialized = true;
+            if (lastBuilt == null || !lastBuilt.matches(start, axis, range, halfAngle)
+                || ++ticksSinceBuild >= STATIC_OCCLUSION_REFRESH_TICKS) {
+                long began = System.nanoTime();
+                BeamSnapshot next = BeamSnapshot.build(start, axis, range, halfAngle,
+                    new BeamVisibility(level, player, start, level::hasChunkAt));
+                lastBuildNanos = System.nanoTime() - began;
+                lastBuildSequence++;
+                lastTraceCount = next.traceCount();
+                lastSampleCount = next.sampleCount();
+                state.publish(next);
+                lastBuilt = next;
+                ticksSinceBuild = 0;
             }
             state.setActive(true);
         }
@@ -549,135 +498,38 @@ final class OptionalDynamicLights {
             double smoothing = FlashlightBeamMath.frameIndependentFactor(
                 NOMINAL_SMOOTHING, deltaSeconds, NOMINAL_FPS);
             smoothDirection = FlashlightBeamMath.smooth(smoothDirection, target, smoothing);
-            Vec3 axis = smoothDirection == null || smoothDirection.lengthSqr() < 1.0E-12
-                ? target.normalize()
-                : smoothDirection.normalize();
-            Vec3 right = rightVector(axis, basisRight);
-            basisRight = right;
-            Vec3 up = right.cross(axis).normalize();
-            state.updateGeometry(start, axis, right, up, range, halfAngle);
-            geometryInitialized = true;
-            state.setActive(true);
-        }
-
-        private static Vec3 rightVector(Vec3 axis, Vec3 previousRight) {
-            // Parallel-transport the previous basis onto the new cone plane. Using
-            // a world-horizontal vector here makes the sample field spin wildly when
-            // the beam is almost vertical and its tiny X/Z component changes azimuth.
-            Vec3 projected = previousRight.subtract(axis.scale(previousRight.dot(axis)));
-            if (projected.lengthSqr() > 1.0E-10) return projected.normalize();
-
-            Vec3 reference = Math.abs(axis.y) < 0.9
-                ? new Vec3(0.0, 1.0, 0.0)
-                : new Vec3(1.0, 0.0, 0.0);
-            return axis.cross(reference).normalize();
+            // Never move published light independently of its visibility results.
         }
     }
 
-    private static final class ConeState {
-        private static final double POSITION_EPSILON_SQR = 0.0025 * 0.0025;
-        private static final double DIRECTION_DOT_EPSILON = Math.cos(Math.toRadians(0.10));
-        private static final double VALUE_EPSILON = 1.0E-5;
-        private static final double HIT_DISTANCE_EPSILON = 0.02;
-
-        private Vec3 origin = Vec3.ZERO;
-        private Vec3 axis = new Vec3(0.0, 0.0, 1.0);
-        private Vec3 right = new Vec3(1.0, 0.0, 0.0);
-        private Vec3 up = new Vec3(0.0, 1.0, 0.0);
-        private double range = 1.0;
-        private double halfAngle = Math.toRadians(7.5);
-        private double[] hitDistances = new double[SAMPLE_X.length];
-        private long[] hitBlocks = new long[SAMPLE_X.length];
-        private boolean active;
-        private long revision = 1L;
+    static final class ConeState {
+        private record Published(BeamSnapshot snapshot, boolean active, long revision) {}
+        private volatile Published published = new Published(BeamSnapshot.empty(), false, 1);
         private long reportedRevision;
 
-        private void setActive(boolean value) {
-            if (active != value) {
-                active = value;
-                revision++;
-            }
+        void publish(BeamSnapshot snapshot) {
+            Published old = published;
+            if (old.snapshot.sameLight(snapshot)) return;
+            published = new Published(snapshot, old.active, old.revision + 1);
         }
 
-        private boolean isActive() {
-            return active;
+        void setActive(boolean active) {
+            Published old = published;
+            if (old.active == active) return;
+            published = new Published(active ? old.snapshot : BeamSnapshot.empty(), active, old.revision + 1);
         }
 
-        private void updateGeometry(Vec3 newOrigin, Vec3 newAxis, Vec3 newRight, Vec3 newUp,
-                                    double newRange, double newHalfAngle) {
-            boolean changed = origin.distanceToSqr(newOrigin) > POSITION_EPSILON_SQR
-                || axis.dot(newAxis) < DIRECTION_DOT_EPSILON
-                || Math.abs(range - newRange) > VALUE_EPSILON
-                || Math.abs(halfAngle - newHalfAngle) > VALUE_EPSILON;
-            if (!changed) return;
-            origin = newOrigin;
-            axis = newAxis;
-            right = newRight;
-            up = newUp;
-            range = newRange;
-            halfAngle = newHalfAngle;
-            revision++;
+        boolean isActive() { return published.active; }
+
+        double lightAt(BlockPos pos) {
+            Published current = published;
+            return current.active ? current.snapshot.lightAt(pos) : 0;
         }
 
-        private void updateOcclusion(double[] newHitDistances, long[] newHitBlocks) {
-            if (!occlusionChanged(newHitDistances, newHitBlocks)) return;
-            hitDistances = newHitDistances.clone();
-            hitBlocks = newHitBlocks.clone();
-            revision++;
-        }
+        int[] bounds() { return published.snapshot.bounds(); }
 
-        private boolean occlusionChanged(double[] distances, long[] blocks) {
-            if (distances.length != hitDistances.length || blocks.length != hitBlocks.length) return true;
-            for (int i = 0; i < distances.length; i++) {
-                if (Math.abs(distances[i] - hitDistances[i]) > HIT_DISTANCE_EPSILON || blocks[i] != hitBlocks[i]) return true;
-            }
-            return false;
-        }
-
-        private double lightAt(BlockPos pos) {
-            Vec3 point = Vec3.atCenterOf(pos);
-            double luminance = FlashlightBeamMath.coneLuminance(origin, axis, point, range, halfAngle);
-            if (luminance <= 0.0) return 0.0;
-
-            Vec3 delta = point.subtract(origin);
-            double forward = delta.dot(axis);
-            double radius = FlashlightBeamMath.coneRadius(forward, halfAngle);
-            double normalizedX = delta.dot(right) / radius;
-            double normalizedY = delta.dot(up) / radius;
-            int sample = FlashlightBeamMath.nearestConeSample(normalizedX, normalizedY, SAMPLE_X, SAMPLE_Y);
-            Vec3 sampleDirection = FlashlightBeamMath.coneDirection(
-                axis, right, up,
-                halfAngle * SAMPLE_X[sample],
-                halfAngle * SAMPLE_Y[sample]
-            );
-            double distanceAlongSampleRay = delta.dot(sampleDirection);
-            return FlashlightBeamMath.visibleAtSample(
-                pos, distanceAlongSampleRay, hitDistances[sample], hitBlocks[sample]) ? luminance : 0.0;
-        }
-
-        private int[] bounds() {
-            Vec3 end = origin.add(axis.scale(range));
-            double startRadius = FlashlightBeamMath.coneRadius(0.0, halfAngle);
-            double endRadius = FlashlightBeamMath.coneRadius(range, halfAngle);
-
-            double startX = startRadius * Math.sqrt(Math.max(0.0, 1.0 - axis.x * axis.x));
-            double startY = startRadius * Math.sqrt(Math.max(0.0, 1.0 - axis.y * axis.y));
-            double startZ = startRadius * Math.sqrt(Math.max(0.0, 1.0 - axis.z * axis.z));
-            double endX = endRadius * Math.sqrt(Math.max(0.0, 1.0 - axis.x * axis.x));
-            double endY = endRadius * Math.sqrt(Math.max(0.0, 1.0 - axis.y * axis.y));
-            double endZ = endRadius * Math.sqrt(Math.max(0.0, 1.0 - axis.z * axis.z));
-
-            return new int[]{
-                (int) Math.floor(Math.min(origin.x - startX, end.x - endX)),
-                (int) Math.floor(Math.min(origin.y - startY, end.y - endY)),
-                (int) Math.floor(Math.min(origin.z - startZ, end.z - endZ)),
-                (int) Math.ceil(Math.max(origin.x + startX, end.x + endX)),
-                (int) Math.ceil(Math.max(origin.y + startY, end.y + endY)),
-                (int) Math.ceil(Math.max(origin.z + startZ, end.z + endZ))
-            };
-        }
-
-        private boolean hasChanged() {
+        boolean hasChanged() {
+            long revision = published.revision;
             if (reportedRevision == revision) return false;
             reportedRevision = revision;
             return true;

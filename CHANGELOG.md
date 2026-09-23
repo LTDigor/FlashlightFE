@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Rebuild the optional LambDynamicLights beam as an immutable snapshot: cone luminance, per-block occlusion traces and published bounds are computed together on the client thread and handed to LDL atomically, so fresh frame geometry can no longer be combined with stale obstacle distances, which made the beam flicker while flying.
+- Replace the sub-block angular cone edge with a torch-rate radial penumbra (15 light levels over 7.75 blocks, the same falloff LDL applies to native held lights) so the lit spot fades smoothly across block centres instead of showing hard block squares.
+- Keep a non-zero near-field cone radius so a beam aimed straight down still reaches floor block centres and lights the ground at the player's feet.
+- Trace exact per-block visibility with unloaded chunks treated as opaque, keeping occluded cells dark without letting light tunnel through solids, and publish bounds together with the light values they cover.
+- Add a real-LambDynamicLights client smoke harness (`prepareBeamSmoke` / `runBeamClientSmoke` with `-PbeamSmokeModDir`) that captures staged screenshots and per-build timings outside Git, plus unit, publication and GameTest coverage for the snapshot math, bounds and occlusion.
+
 ## 1.1.1
 
 - Reduce the default energy consumption to 0.5 FE per second at 20 TPS, while retaining compatible fractional `energyPerTick` configuration and charging only on whole-FE ticks.
