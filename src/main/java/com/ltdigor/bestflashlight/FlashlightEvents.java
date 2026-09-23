@@ -49,6 +49,9 @@ public final class FlashlightEvents {
     // of the forward rays become emitters. Their brightness grows with distance so the
     // backwards spill at the player's position stays roughly at light level three.
     private static final double HEAD_MOUNTED_MIN_FORWARD = 0.75;
+    // Keep handheld emitters off the player's own cells: a level 15 source at the eyes
+    // spreads vanilla block light in every direction and reads as a personal glow.
+    private static final double HANDHELD_MIN_FORWARD = 2.0;
     private static final int HEAD_MOUNTED_BACKSPILL_LEVEL = 3;
     private static final int HEAD_MOUNTED_CLOSE_WALL_LEVEL = 4;
     private static final int HANDHELD_CLOSE_WALL_LEVEL = 15;
@@ -314,7 +317,7 @@ public final class FlashlightEvents {
             BlockState state = states.computeIfAbsent(pos, level::getBlockState);
             if (state.getCollisionShape(level, pos, context).clip(origin, end, pos) != null) return;
             double forward = pos.getCenter().subtract(origin).dot(axis);
-            if (forward >= 0.0 && forward <= range && acceptsLight(state)) {
+            if (forward >= HANDHELD_MIN_FORWARD && forward <= range && acceptsLight(state)) {
                 int brightness = 15 - (int) Math.floor(9.0 * forward / range);
                 result.merge(pos, brightness, Math::max);
             }

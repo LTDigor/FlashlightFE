@@ -80,7 +80,8 @@ final class HeadbandRenderer {
             callCuriosRenderer("followHeadRotations", new Class<?>[]{LivingEntity.class, ModelPart[].class}, entity, new ModelPart[]{head});
             if (!entity.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) pose.scale(1.15F, 1.15F, 1.15F);
             head.translateAndRotate(pose);
-            pose.mulPose(Axis.ZP.rotationDegrees(180));
+            // The authored emitter faces -Z while the head mount faces +Z; a Z roll kept the lamp on the nape.
+            pose.mulPose(Axis.YP.rotationDegrees(180));
             pose.translate(-0.5, -0.5, -0.5);
             for (BakedModel pass : geometry.getRenderPasses(stack, true)) {
                 for (RenderType type : pass.getRenderTypes(stack, true)) {

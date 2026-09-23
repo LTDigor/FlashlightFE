@@ -20,6 +20,8 @@ repositories {
 dependencies {
     compileOnly 'mezz.jei:jei-1.21.1-common-api:19.54.0.429'
     compileOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
+    // Dev runs only; the shipped mod keeps Curios optional via mods.toml.
+    runtimeOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
     smokeImplementation 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
     testRuntimeOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
     smokeImplementation 'curse.maven:immersive-engineering-231951:6733669'
@@ -33,6 +35,11 @@ if (providers.gradleProperty('beamSmokeModDir').isPresent()) {
         include 'lambdynamiclights-*.jar'
     })
 }
+// Quick Play arguments prepared by the MinecraftUtils minecraft_run_script, when present.
+def addQuickPlay = { cfg, String runDir ->
+    def argsFile = file(runDir + '/minecraft-run-script/quick-play.args.txt')
+    if (argsFile.exists()) argsFile.readLines().findAll { it.trim() }.each { cfg.programArgument it }
+}
 neoForge {
     version = '21.1.249'
     addModdingDependenciesTo sourceSets.smoke
@@ -41,7 +48,9 @@ neoForge {
         bestflashlightSmoke { sourceSet sourceSets.main; sourceSet sourceSets.smoke }
     }
     runs {
-        client { client(); loadedMods = [mods.bestflashlight] }
+        client { client(); loadedMods = [mods.bestflashlight]; addQuickPlay(delegate, 'run') }
+        // Manual validation client: real Curios and the dev-only head slot, no scripted smoke.
+        clientValidate { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-validate'); addQuickPlay(delegate, 'run-client-validate') }
         server { server(); sourceSet = sourceSets.main; loadedMods = [mods.bestflashlight]; programArgument '--nogui'; gameDirectory = file('run-server') }
         gameTestServer { type = 'gameTestServer'; sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-gametest') }
         clientSmoke { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
@@ -51,6 +60,7 @@ neoForge {
             systemProperty 'bestflashlight.beamSmoke', 'true'
             systemProperty 'bestflashlight.beamDiagnostics', 'true'
             systemProperty 'bestflashlight.beamSmoke.baseline', providers.gradleProperty('beamSmokeBaseline').getOrElse('false')
+            systemProperty 'bestflashlight.beamSmoke.stages', providers.gradleProperty('beamSmokeStages').getOrElse('')
             programArgument '--username'; programArgument 'BeamSmoke'
         }
         clientReloadSmoke { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; systemProperty 'bestflashlight.smoke.reload', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
@@ -61,17 +71,21 @@ neoForge {
     }
     unitTest { enable(); testedMod = mods.bestflashlightSmoke }
 }
-tasks.named('test', Test) { useJUnitPlatform() }
+tasks.named('test', Test) { useJUnitPlatform(); systemProperty 'bestflashlight.projectDir', projectDir.absolutePath }
 
 // This run directory is disposable. Skip first-run accessibility onboarding so smoke can reach TitleScreen.
-['runClientSmoke', 'runClientReloadSmoke'].each { taskName ->
+// Dev clients must stay silent: force every sound category to zero on each launch.
+['runClientSmoke': 'run-client-smoke', 'runClientReloadSmoke': 'run-client-smoke',
+ 'runClientValidate': 'run-client-validate'].each { taskName, runDir ->
     tasks.named(taskName) {
         doFirst {
-            def options = file('run-client-smoke/options.txt')
-            def keys = ['onboardAccessibility:', 'pauseOnLostFocus:']
+            def options = file(runDir + '/options.txt')
+            def keys = ['onboardAccessibility:', 'pauseOnLostFocus:', 'soundCategory_']
             def existing = options.exists() ? options.readLines().findAll { line -> !keys.any { line.startsWith(it) } } : []
+            def muted = ['master', 'music', 'record', 'weather', 'block', 'hostile',
+                         'neutral', 'player', 'ambient', 'voice'].collect { "soundCategory_${it}:0" }
             options.parentFile.mkdirs()
-            options.text = (existing + ['onboardAccessibility:false', 'pauseOnLostFocus:false']).join(System.lineSeparator()) + System.lineSeparator()
+            options.text = (existing + ['onboardAccessibility:false', 'pauseOnLostFocus:false'] + muted).join(System.lineSeparator()) + System.lineSeparator()
         }
     }
 }
