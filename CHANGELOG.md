@@ -12,6 +12,8 @@
 - Close the cutout-aliasing sawteeth on the octagon barrel and headlamp: side quads now overlap at the octagon corners and sleeves reach slightly past their end caps instead of meeting them edge to edge.
 - Add a `clientValidate` run configuration for manual checks with real Curios and the dev head slot, without the scripted smoke stages.
 - Keep the no-LambDynamicLights server fallback directional: handheld beam emitters now start two blocks ahead of the eyes instead of at the player's own cell, so the temporary block-light beam no longer washes the player from every side.
+- Rewrite the server fallback lighting around immutable per-source beam frames: frames are aggregated per dimension by maximum requested brightness and reconciled against the previously applied carrier state, so unchanged beams perform zero world mutations. Transient carriers are now passive (no per-player ownership, no self-scheduled validation ticks) and persisted orphans are recovered event-driven on chunk load.
+- Move the mod Java package to `com.ltdigor.flashlightfe`; the mod id, registry namespace, config keys and item/block ids are unchanged.
 
 ## 1.1.1
 

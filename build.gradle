@@ -3,7 +3,7 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.146'
 }
 version = providers.gradleProperty('mod_version').get()
-group = 'com.ltdigor.bestflashlight'
+group = 'com.ltdigor.flashlightfe'
 base { archivesName = 'flashlight-fe' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 sourceSets { smoke { compileClasspath += sourceSets.main.output; runtimeClasspath += sourceSets.main.output } }
@@ -76,7 +76,7 @@ tasks.named('test', Test) { useJUnitPlatform(); systemProperty 'bestflashlight.p
 // This run directory is disposable. Skip first-run accessibility onboarding so smoke can reach TitleScreen.
 // Dev clients must stay silent: force every sound category to zero on each launch.
 ['runClientSmoke': 'run-client-smoke', 'runClientReloadSmoke': 'run-client-smoke',
- 'runClientValidate': 'run-client-validate'].each { taskName, runDir ->
+ 'runClientValidate': 'run-client-validate', 'runBeamClientSmoke': 'run-beam-smoke'].each { taskName, runDir ->
     tasks.named(taskName) {
         doFirst {
             def options = file(runDir + '/options.txt')
