@@ -26,6 +26,7 @@ dependencies {
     testRuntimeOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
     smokeImplementation 'curse.maven:immersive-engineering-231951:6733669'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.mockito:mockito-core:5.14.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 // Local real LDL fixture; optional and confined to the beam smoke launch.
