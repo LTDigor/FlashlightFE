@@ -37,7 +37,7 @@ public final class FlashlightMod {
     public static final DeferredHolder<Block, Block> FLASHLIGHT_LIGHT = BLOCKS.register("flashlight_light", () ->
         new TransientLightBlock(BlockBehaviour.Properties.of().replaceable().noCollission().noOcclusion()
             .mapColor(state -> state.getValue(TransientLightBlock.WATERLOGGED) ? MapColor.WATER : MapColor.NONE)
-            .noLootTable().pushReaction(PushReaction.BLOCK)
+            .noLootTable().pushReaction(PushReaction.DESTROY)
             .lightLevel(state -> state.getValue(TransientLightBlock.LEVEL))));
     public static final DeferredHolder<RecipeSerializer<?>, RecipeSerializer<?>> HEADBAND_RECIPE = RECIPES.register(
         "headband_mount", () -> new SimpleCraftingRecipeSerializer<>(HeadbandRecipe::new));

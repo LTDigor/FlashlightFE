@@ -35,7 +35,7 @@ public final class HeadbandItem extends Item implements Equipable {
 
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
-        if (CuriosCompatibility.isLoaded()) return CuriosCompatibility.equipHeadbandFromUse(level, player, hand);
+        if (CuriosCompatibility.hasHeadSlot(player)) return CuriosCompatibility.equipHeadbandFromUse(level, player, hand);
         return swapWithEquipmentSlot(this, level, player, hand);
     }
 

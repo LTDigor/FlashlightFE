@@ -28,6 +28,13 @@ public final class CuriosCompatibility {
         return ModList.get().isLoaded(MOD_ID);
     }
 
+    /** A registered slot type is not necessarily assigned to this entity. Full slots still count. */
+    public static boolean hasHeadSlot(LivingEntity entity) {
+        if (!isLoaded()) return false;
+        Object head = curiosInventory(entity).map(CuriosCompatibility::headHandler).orElse(null);
+        return head != null && (int) call(call(head, "getStacks"), "getSlots") > 0;
+    }
+
     public static void setup(FMLCommonSetupEvent event) {
         if (isLoaded()) event.enqueueWork(CuriosCompatibility::registerCurios);
     }
@@ -37,9 +44,9 @@ public final class CuriosCompatibility {
             curiosInventory(entity).ifPresent(CuriosCompatibility::returnInvalidFlashlights);
     }
 
-    /** Returns loaded headbands in Curios' head slots, or the vanilla head slot without Curios. */
+    /** Uses vanilla HEAD when Curios is absent or provides no functional head slot. */
     public static List<ItemStack> headbands(LivingEntity entity) {
-        if (!isLoaded()) {
+        if (!hasHeadSlot(entity)) {
             ItemStack stack = entity.getItemBySlot(EquipmentSlot.HEAD);
             return isLoadedHeadband(stack) ? List.of(stack) : List.of();
         }
@@ -47,7 +54,7 @@ public final class CuriosCompatibility {
     }
 
     public static ItemStack headband(LivingEntity entity, int slotIndex) {
-        if (!isLoaded()) return slotIndex == 0 ? headbands(entity).stream().findFirst().orElse(ItemStack.EMPTY) : ItemStack.EMPTY;
+        if (!hasHeadSlot(entity)) return slotIndex == 0 ? headbands(entity).stream().findFirst().orElse(ItemStack.EMPTY) : ItemStack.EMPTY;
         return curiosInventory(entity).map(inventory -> curiosHeadband(inventory, slotIndex)).orElse(ItemStack.EMPTY);
     }
 
