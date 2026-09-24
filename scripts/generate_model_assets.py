@@ -22,6 +22,7 @@ TILES = {'grip': (0, 0), 'housing': (1, 0), 'steel': (2, 0), 'rubber': (3, 0),
          'cap': (0, 2), 'steel_cap': (1, 2), 'bezel': (2, 2), 'lens': (3, 2),
          'battery': (0, 3), 'ribs': (1, 3)}
 DIRECTIONS = ('north', 'south', 'east', 'west', 'up', 'down')
+OVERLAP = 0.06
 
 
 def face(material, light=False):
@@ -45,7 +46,11 @@ def cap(name, cx, cy, radius, z, material, direction='north'):
 
 def shell(name, cx, cy, radius, z0, z1, material, inside=False):
     """Eight joined side quads. All rotations are native +/-45 degree Z rotations."""
-    a = round(radius * (math.sqrt(2) - 1), 6)
+    # Exactly coincident quad edges leave cutout-aliasing sawteeth in game, so side quads
+    # overlap at the octagon corners and sleeves reach past their end caps.
+    a = round(radius * (math.sqrt(2) - 1) + OVERLAP, 6)
+    z0 -= OVERLAP
+    z1 += OVERLAP
     templates = [((cx - a, cy + radius, z0), (cx + a, cy + radius, z1), 'up'),
                  ((cx - a, cy - radius, z0), (cx + a, cy - radius, z1), 'down'),
                  ((cx + radius, cy - a, z0), (cx + radius, cy + a, z1), 'east'),
