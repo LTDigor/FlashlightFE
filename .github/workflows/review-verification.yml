@@ -50,6 +50,13 @@ jobs:
         if: ${{ !cancelled() }}
         continue-on-error: true
         run: ./gradlew --no-daemon runGameTestServer
+      - name: Production JAR in clean standalone servers
+        id: runtime
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          ./gradlew --no-daemon prepareRuntimeCheck
+          python3 scripts/test_release_runtime.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -58,7 +65,9 @@ jobs:
             build/reports/tests/
             build/test-results/
             run-gametest/logs/
+            build/runtime-check/summary.json
+            build/runtime-check/servers/**/*.log
           retention-days: 7
-      - name: Require both suites
-        if: ${{ !cancelled() && (steps.unit.outcome != 'success' || steps.game.outcome != 'success') }}
+      - name: Require all verification suites
+        if: ${{ !cancelled() && (steps.unit.outcome != 'success' || steps.game.outcome != 'success' || steps.runtime.outcome != 'success') }}
         run: exit 1

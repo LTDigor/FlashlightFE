@@ -6,8 +6,12 @@ version = providers.gradleProperty('mod_version').get()
 group = 'com.ltdigor.flashlightfe'
 base { archivesName = 'flashlight-fe' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
-sourceSets { smoke { compileClasspath += sourceSets.main.output; runtimeClasspath += sourceSets.main.output } }
+sourceSets {
+    smoke { compileClasspath += sourceSets.main.output; runtimeClasspath += sourceSets.main.output }
+    runtimeCheck { compileClasspath += sourceSets.main.output }
+}
 configurations {
+    runtimeCheckImplementation.extendsFrom implementation
     smokeImplementation.extendsFrom implementation
     smokeRuntimeOnly.extendsFrom runtimeOnly
 }
@@ -44,6 +48,7 @@ def addQuickPlay = { cfg, String runDir ->
 neoForge {
     version = '21.1.249'
     addModdingDependenciesTo sourceSets.smoke
+    addModdingDependenciesTo sourceSets.runtimeCheck
     mods {
         bestflashlight { sourceSet sourceSets.main }
         bestflashlightSmoke { sourceSet sourceSets.main; sourceSet sourceSets.smoke }
@@ -137,5 +142,20 @@ tasks.register('prepareBeamSmoke') {
         def runTask = tasks.named('runBeamClientSmoke').get()
         def command = [javaPath, '-Xmx2G', '-cp', runTask.classpathProvider.asPath] + runTask.allJvmArgs + runTask.args
         file('build/beamClientSmoke-command.json').text = groovy.json.JsonOutput.toJson(command)
+    }
+}
+
+// Isolated verification fixture, never part of the published main JAR or build/libs glob.
+tasks.register('runtimeCheckJar', Jar) {
+    from sourceSets.runtimeCheck.output
+    archiveFileName = 'flashlight-runtime-check.jar'
+    destinationDirectory = layout.buildDirectory.dir('runtime-check')
+}
+tasks.register('prepareRuntimeCheck') {
+    dependsOn 'jar', 'runtimeCheckJar'
+    doLast {
+        def curios = configurations.runtimeClasspath.files.find { it.name.startsWith('curios-neoforge-') }
+        if (curios == null) throw new GradleException('Pinned Curios runtime fixture is missing')
+        copy { from curios; into layout.buildDirectory.dir('runtime-check'); rename { 'curios.jar' } }
     }
 }

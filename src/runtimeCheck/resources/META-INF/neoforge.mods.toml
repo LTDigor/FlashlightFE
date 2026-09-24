@@ -1,0 +1,13 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="bestflashlight_runtime_check"
+version="1.0.0"
+displayName="Flashlight FE Runtime Verification (Development Only)"
+[[dependencies.bestflashlight_runtime_check]]
+modId="bestflashlight"
+type="required"
+versionRange="[1.1.1,)"
+ordering="AFTER"
+side="SERVER"

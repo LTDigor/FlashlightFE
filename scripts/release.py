@@ -66,7 +66,8 @@ def validate_jar(path, version):
         if len(names) != len(set(names)):
             raise ValueError('Duplicate JAR entries')
         forbidden = [name for name in names if re.search(r'(GameTests|Smoke|Test)(?:\$[^/]*)?\.class$', name)
-                     or name.startswith(('org/junit/', 'data/bestflashlight/structure/', 'data/bestflashlight/gametest/'))]
+                     or name.startswith(('org/junit/', 'data/bestflashlight/structure/', 'data/bestflashlight/gametest/',
+                                         'com/ltdigor/flashlightfe/runtimecheck/', 'org/mockito/'))]
         if forbidden:
             raise ValueError(f'Test resources in release JAR: {forbidden}')
         metadata = tomllib.loads(jar.read('META-INF/neoforge.mods.toml').decode())
@@ -199,6 +200,16 @@ def prepare():
             upload(repo, tag, directory / name)
     # Always download from the release, including the initial run. Never upload rebuilt bytes.
     manifest = json.loads(fetch(repo, tag, 'release.json', directory).read_text())
+    if manifest.get('commit') != os.environ['GITHUB_SHA']:
+        manual_recovery = (os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+                           and os.environ.get('RELEASE_RECOVERY') == 'true')
+        if not manual_recovery:
+            raise ValueError(
+                f"{tag} already belongs to commit {manifest.get('commit')}; "
+                'bump mod_version and CHANGELOG.md to publish this commit. '
+                'For recovery of the ORIGINAL artifact only, use manual dispatch with recover_existing=true.')
+        print(f'::warning::Recovering {tag} from original commit {manifest["commit"]}; '
+              'the current checkout is NOT being published.')
     jar = fetch(repo, tag, filename, directory)
     validate_manifest(manifest, version, projects, jar.read_bytes())
     validate_jar(jar, version)

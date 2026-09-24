@@ -58,7 +58,7 @@ class ReleaseTests(unittest.TestCase):
     def test_jar_validation_rejects_wrong_version_and_smoke_files(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'flashlight-fe-1.2.3.jar'
-            for extra, metadata in [(None, METADATA), ('com/ltdigor/bestflashlight/BeamGameTests.class', METADATA), ('data/bestflashlight/structure/empty.nbt', METADATA), (None, METADATA.replace('1.2.3', '${mod_version}'))]:
+            for extra, metadata in [(None, METADATA), ('com/ltdigor/bestflashlight/BeamGameTests.class', METADATA), ('data/bestflashlight/structure/empty.nbt', METADATA), ('com/ltdigor/flashlightfe/runtimecheck/FlashlightRuntimeCheck.class', METADATA), ('org/mockito/Mockito.class', METADATA), (None, METADATA.replace('1.2.3', '${mod_version}'))]:
                 with zipfile.ZipFile(path, 'w') as jar:
                     jar.writestr('META-INF/neoforge.mods.toml', metadata)
                     jar.writestr('com/ltdigor/bestflashlight/BestFlashlight.class', b'bytecode')
@@ -249,7 +249,8 @@ class LedgerIntegrationTests(unittest.TestCase):
         }
         original_assets = self.assets.copy()
         Path('build/libs/flashlight-fe-1.2.3.jar').write_bytes(b'different rebuild')
-        with patch.dict(os.environ, {'GITHUB_SHA': 'c' * 40}):
+        with patch.dict(os.environ, {'GITHUB_SHA': 'c' * 40,
+                                    'GITHUB_EVENT_NAME': 'workflow_dispatch', 'RELEASE_RECOVERY': 'true'}):
             release.prepare()
         self.assertEqual(Path('release-artifact/flashlight-fe-1.2.3.jar').read_bytes(), original)
         self.assertEqual(Path('release-artifact/changelog.md').read_bytes(), original_assets['changelog.md'])
@@ -278,7 +279,8 @@ class LedgerIntegrationTests(unittest.TestCase):
             release.record('modrinth', 'published')
         # A later commit's freshly rebuilt JAR must never replace the original.
         Path('build/libs/flashlight-fe-1.2.3.jar').write_bytes(b'new build')
-        with patch.dict(os.environ, {'GITHUB_SHA': 'c' * 40}):
+        with patch.dict(os.environ, {'GITHUB_SHA': 'c' * 40,
+                                    'GITHUB_EVENT_NAME': 'workflow_dispatch', 'RELEASE_RECOVERY': 'true'}):
             release.prepare()
         self.assertEqual(Path('release-artifact/flashlight-fe-1.2.3.jar').read_bytes(), original)
         self.assertEqual(self.outputs.call_args.kwargs['modrinth'], 'published')

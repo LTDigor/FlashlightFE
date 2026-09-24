@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      recover_existing:
+        description: 'Recover the ORIGINAL release artifact, not the current commit'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,6 +58,7 @@ jobs:
     permissions:
       contents: write
     env:
+      RELEASE_RECOVERY: ${{ github.event_name == 'workflow_dispatch' && inputs.recover_existing == true && 'true' || 'false' }}
       GH_TOKEN: ${{ github.token }}
       PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED }}
       MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
@@ -98,7 +104,7 @@ jobs:
           environment: both
           # Verified api.modrinth.com/v2/project/{curios,jei}, 2026-09-15.
           modrinth-dependencies: |
-            vvuO3ImH(required)
+            vvuO3ImH(optional)
             u6dRKJwZ(optional)
           # Editing old featured versions is optional; upload must still succeed if it is unauthorized.
           modrinth-unfeature-mode: none
@@ -134,7 +140,7 @@ jobs:
           environment: both
           # Verified official curseforge.com projects /curios and /jei, 2026-09-15.
           curseforge-dependencies: |
-            309927(required)
+            309927(optional)
             238222(optional)
           retry-attempts: 1
           fail-mode: fail
