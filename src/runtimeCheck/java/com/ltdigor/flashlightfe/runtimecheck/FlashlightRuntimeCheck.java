@@ -21,6 +21,7 @@ import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /** Development-only mod, packaged separately. Runs against the production JAR in a real server. */
@@ -34,7 +35,8 @@ public final class FlashlightRuntimeCheck {
 
     public FlashlightRuntimeCheck() {
         NeoForge.EVENT_BUS.addListener(this::started);
-        NeoForge.EVENT_BUS.addListener(this::tick);
+        NeoForge.EVENT_BUS.addListener(this::playerTick);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, this::tick);
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, this::stopping);
         NeoForge.EVENT_BUS.addListener(this::stopped);
     }
@@ -63,12 +65,18 @@ public final class FlashlightRuntimeCheck {
         LogUtils.getLogger().info("RUNTIME_CHECK_STARTED curios={}", expectedCurios);
     }
 
+    private void playerTick(ServerTickEvent.Pre event) {
+        if (wearer == null) return;
+        // The fixture's FakePlayer is not in the server's entity tick list. Emit its
+        // standard player event, rather than bypassing the production event wiring.
+        NeoForge.EVENT_BUS.post(new PlayerTickEvent.Post(wearer));
+    }
+
     private void tick(ServerTickEvent.Post event) {
         if (wearer == null) return;
-        var manager = ServerBeamLightingManager.get();
-        manager.updatePlayer(wearer);
-        manager.endServerTick(event.getServer());
-        var state = manager.playerFrame(wearer.getUUID());
+        // LOWEST observes the real server Post event after the production manager
+        // listener has reconciled the world; no direct update/reconcile calls here.
+        var state = ServerBeamLightingManager.get().playerFrame(wearer.getUUID());
         require(state != null && !state.frame().isEmpty(), "Equipped headband produced no fallback beam");
         probe = state.frame().lights().keySet().iterator().next();
         require(wearer.serverLevel().getBlockState(probe).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
