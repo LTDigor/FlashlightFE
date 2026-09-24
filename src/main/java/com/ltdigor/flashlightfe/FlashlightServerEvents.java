@@ -9,6 +9,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
@@ -25,6 +26,7 @@ public final class FlashlightServerEvents {
         NeoForge.EVENT_BUS.addListener(FlashlightServerEvents::onChunkLoad);
         NeoForge.EVENT_BUS.addListener(FlashlightServerEvents::onServerTick);
         NeoForge.EVENT_BUS.addListener(FlashlightServerEvents::onLevelUnload);
+        NeoForge.EVENT_BUS.addListener(FlashlightServerEvents::onServerStopping);
         NeoForge.EVENT_BUS.addListener(FlashlightServerEvents::onServerStopped);
     }
 
@@ -74,6 +76,10 @@ public final class FlashlightServerEvents {
             ServerBeamLightingManager.get().levelUnloaded(level);
             DynamicLightCoordination.levelUnloaded(level.dimension());
         }
+    }
+
+    public static void onServerStopping(ServerStoppingEvent event) {
+        ServerBeamLightingManager.get().serverStopping(event.getServer());
     }
 
     public static void onServerStopped(ServerStoppedEvent event) {

@@ -4,6 +4,7 @@ import com.ltdigor.flashlightfe.FlashlightConfig;
 import com.ltdigor.flashlightfe.FlashlightNetwork;
 import com.ltdigor.flashlightfe.LampEnergy;
 import com.ltdigor.flashlightfe.LampSource;
+import com.ltdigor.flashlightfe.lighting.EmitterTransform;
 import com.mojang.logging.LogUtils;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
@@ -271,16 +272,9 @@ final class OptionalDynamicLights {
     }
 
     private static Vec3 emitterOrigin(Player player, boolean headMounted, boolean offHand, Vec3 look, Vec3 eye) {
-        if (headMounted) return eye.add(look.scale(0.45)).add(0.0, 0.15, 0.0);
-        Vec3 right = new Vec3(-look.z, 0.0, look.x);
-        if (right.lengthSqr() < 1.0E-12) {
-            double yaw = Math.toRadians(player.getYRot());
-            right = new Vec3(-Math.cos(yaw), 0.0, -Math.sin(yaw));
-        } else {
-            right = right.normalize();
-        }
         boolean rightHand = (player.getMainArm() == HumanoidArm.RIGHT) != offHand;
-        return eye.add(look.scale(0.55)).add(right.scale(rightHand ? 0.35 : -0.35)).add(0.0, -0.45, 0.0);
+        EmitterTransform transform = headMounted ? EmitterTransform.HEADBAND : EmitterTransform.HANDHELD;
+        return transform.origin(eye, look, Math.toRadians(player.getYRot()), rightHand, headMounted);
     }
 
     private static boolean isSubmerged(ClientLevel level, Vec3 origin) {

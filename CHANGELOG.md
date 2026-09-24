@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## [1.1.2] - 2026-09-24
+
+- Reconcile externally removed or modified transient lights without rewriting unchanged beams.
+- Restore server fallback lights before normal world saving during shutdown.
+- Align client LDL and server headlamp emitter transforms, including underwater selection.
+- Let pistons destroy temporary light carriers instead of blocking or transporting them.
+- Use vanilla head equipment when Curios is installed without a functional head slot; do not create slots or replace helmets when an existing Curios slot is occupied.
+- Mark Curios optional on both distribution platforms.
+- Reject accidental cross-commit reuse of a release version; retain explicit manual recovery of original immutable artifacts.
+- Add regression tests for real-tick world-state recovery, emitter parity, piston/water behavior, optional Curios and release safeguards.
 
 - Rebuild the optional LambDynamicLights beam as an immutable snapshot: cone luminance, per-block occlusion traces and published bounds are computed together on the client thread and handed to LDL atomically, so fresh frame geometry can no longer be combined with stale obstacle distances, which made the beam flicker while flying.
 - Replace the sub-block angular cone edge with a torch-rate radial penumbra (15 light levels over 7.75 blocks, the same falloff LDL applies to native held lights) so the lit spot fades smoothly across block centres instead of showing hard block squares.

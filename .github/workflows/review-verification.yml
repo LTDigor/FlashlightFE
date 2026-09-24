@@ -1,0 +1,73 @@
+name: Review verification
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: review-verification-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Record exact tested source
+        run: |
+          mkdir -p verification
+          git rev-parse HEAD > verification/COMMIT
+          git archive --format=tar HEAD -o verification/source.tar
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verification-source
+          path: verification/
+          retention-days: 7
+
+  regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Java unit regressions
+        id: unit
+        continue-on-error: true
+        run: ./gradlew --no-daemon test
+      - name: Real server regressions
+        id: game
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: ./gradlew --no-daemon runGameTestServer
+      - name: Production JAR in clean standalone servers
+        id: runtime
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          ./gradlew --no-daemon prepareRuntimeCheck
+          python3 scripts/test_release_runtime.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: regression-results
+          path: |
+            build/reports/tests/
+            build/test-results/
+            run-gametest/logs/
+            build/runtime-check/summary.json
+            build/runtime-check/servers/**/*.log
+          retention-days: 7
+      - name: Require all verification suites
+        if: ${{ !cancelled() && (steps.unit.outcome != 'success' || steps.game.outcome != 'success' || steps.runtime.outcome != 'success') }}
+        run: exit 1

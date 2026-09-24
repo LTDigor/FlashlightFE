@@ -32,6 +32,7 @@ import net.minecraft.world.phys.Vec3;
 public final class ServerBeamLightingManager {
     private static final ServerBeamLightingManager INSTANCE = new ServerBeamLightingManager();
     private static final int STATIC_BEAM_REFRESH_TICKS = 4;
+    private static final int WORLD_VALIDATION_INTERVAL_TICKS = 4;
     private static final double CACHE_POSITION_EPSILON_SQR = 0.01 * 0.01;
     private static final double CACHE_DIRECTION_DOT = Math.cos(Math.toRadians(0.20));
     private static final int HEAD_MOUNTED_CLOSE_WALL_LEVEL = 4;
@@ -41,6 +42,7 @@ public final class ServerBeamLightingManager {
     private final Map<ResourceKey<Level>, AppliedDimensionState> applied = new HashMap<>();
     private final Set<ResourceKey<Level>> dirtyDimensions = new HashSet<>();
     private final ArrayDeque<OrphanCandidate> orphanCandidates = new ArrayDeque<>();
+    private int lastValidationTick = -1;
 
     /** Geometry cache plus the frame it produced; owns no world positions per player. */
     public record PlayerBeamState(BeamFrame frame, Vec3 eye, Vec3 emitter, Vec3 look,
@@ -188,6 +190,7 @@ public final class ServerBeamLightingManager {
 
     /** One aggregate + one reconciliation per dirty dimension per server tick. */
     public void endServerTick(MinecraftServer server) {
+        validateAppliedWorld(server);
         if (dirtyDimensions.isEmpty() && orphanCandidates.isEmpty()) return;
         for (ResourceKey<Level> dimension : List.copyOf(dirtyDimensions)) {
             ServerLevel level = server.getLevel(dimension);
@@ -195,6 +198,39 @@ public final class ServerBeamLightingManager {
             reconcile(level, dimension);
         }
         dirtyDimensions.clear();
+    }
+
+    /**
+     * The cached frame describes desired light, not proof that a carrier still exists.
+     * Periodically reconcile our bookkeeping with loaded-world state. This is a read-only
+     * pass over tracked positions, not a block tick, and never acquires unloaded chunks.
+     */
+    private void validateAppliedWorld(MinecraftServer server) {
+        int tick = server.getTickCount();
+        if (tick == lastValidationTick || tick % WORLD_VALIDATION_INTERVAL_TICKS != 0) return;
+        lastValidationTick = tick;
+        for (var dimension : applied.entrySet()) {
+            ServerLevel level = server.getLevel(dimension.getKey());
+            if (level == null) continue;
+            var iterator = dimension.getValue().lights().entrySet().iterator();
+            while (iterator.hasNext()) {
+                var entry = iterator.next();
+                BlockPos pos = entry.getKey();
+                if (!ServerBeamCalculator.isLoaded(level, pos)) continue;
+                var actual = level.getBlockState(pos);
+                if (!actual.is(FlashlightMod.FLASHLIGHT_LIGHT.get())) {
+                    iterator.remove();
+                    dirtyDimensions.add(dimension.getKey());
+                } else {
+                    AppliedLight observed = new AppliedLight(actual.getValue(TransientLightBlock.LEVEL),
+                        TransientLightWorldApplier.environmentOf(actual));
+                    if (!observed.equals(entry.getValue())) {
+                        entry.setValue(observed);
+                        dirtyDimensions.add(dimension.getKey());
+                    }
+                }
+            }
+        }
     }
 
     private void reconcile(ServerLevel level, ResourceKey<Level> dimension) {
@@ -233,8 +269,8 @@ public final class ServerBeamLightingManager {
         }
     }
 
-    /** Normal shutdown restores every carrier in loaded chunks; unloaded ones wait for recovery. */
-    public void serverStopped(MinecraftServer server) {
+    /** Restore before the server performs its final world save. */
+    public void serverStopping(MinecraftServer server) {
         for (var entry : new HashMap<>(applied).entrySet()) {
             ServerLevel level = server.getLevel(entry.getKey());
             if (level == null) continue;
@@ -242,10 +278,27 @@ public final class ServerBeamLightingManager {
                 TransientLightWorldApplier.restore(level, entry.getValue(), pos);
             }
         }
+        // Also clean loaded persisted carriers which were queued after the last reconcile.
+        for (OrphanCandidate orphan : orphanCandidates) {
+            ServerLevel level = server.getLevel(orphan.dimension());
+            if (level != null) {
+                TransientLightWorldApplier.restore(level, new AppliedDimensionState(), orphan.pos());
+            }
+        }
+        clearState();
+    }
+
+    /** Worlds have already closed here; only release references, never mutate them. */
+    public void serverStopped(MinecraftServer server) {
+        clearState();
+    }
+
+    private void clearState() {
         players.clear();
         applied.clear();
         dirtyDimensions.clear();
         orphanCandidates.clear();
+        lastValidationTick = -1;
     }
 
     /** Test hook: mutation counters prove a static beam stops touching the world. */

@@ -292,8 +292,8 @@ public class BeamGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
         level.setBlock(pos, TransientLightBlock.carrier(9, new RestorableEnvironment.Air()), 3);
-        helper.assertTrue(level.getBlockState(pos).getPistonPushReaction() == PushReaction.BLOCK,
-            "Transient carrier must refuse piston moves");
+        helper.assertTrue(level.getBlockState(pos).getPistonPushReaction() == PushReaction.DESTROY,
+            "Transient carrier must yield by destruction, never block or move with a piston");
         helper.succeed();
     }
 
