@@ -1,0 +1,68 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.146'
+}
+version = providers.gradleProperty('mod_version').get()
+group = 'com.ltdigor.bestflashlight'
+base { archivesName = 'flashlight-fe' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+sourceSets { smoke { compileClasspath += sourceSets.main.output; runtimeClasspath += sourceSets.main.output } }
+configurations {
+    smokeImplementation.extendsFrom implementation
+    smokeRuntimeOnly.extendsFrom runtimeOnly
+}
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.blamejared.com'; content { includeGroup 'mezz.jei' } }
+    maven { url = 'https://maven.theillusivec4.top'; content { includeGroup 'top.theillusivec4.curios' } }
+    maven { url = 'https://www.cursemaven.com'; content { includeGroup 'curse.maven' } }
+}
+dependencies {
+    compileOnly 'mezz.jei:jei-1.21.1-common-api:19.54.0.429'
+    implementation 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
+    smokeImplementation 'curse.maven:immersive-engineering-231951:6733669'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+neoForge {
+    version = '21.1.249'
+    addModdingDependenciesTo sourceSets.smoke
+    runs {
+        client { client() }
+        server { server(); programArgument '--nogui'; gameDirectory = file('run-server') }
+        gameTestServer { type = 'gameTestServer'; sourceSet = sourceSets.smoke; gameDirectory = file('run-gametest') }
+        clientSmoke { client(); sourceSet = sourceSets.smoke; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
+        clientReloadSmoke { client(); sourceSet = sourceSets.smoke; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; systemProperty 'bestflashlight.smoke.reload', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
+        multiplayerServer { server(); sourceSet = sourceSets.smoke; gameDirectory = file('run-multiplayer-server'); systemProperty 'bestflashlight.multiplayer.server', 'true'; programArgument '--nogui' }
+        multiplayerA { client(); sourceSet = sourceSets.smoke; gameDirectory = file('run-client-a'); systemProperty 'bestflashlight.multiplayer.client', 'true'; programArgument '--username'; programArgument 'FlashlightA' }
+        multiplayerB { client(); sourceSet = sourceSets.smoke; gameDirectory = file('run-client-b'); systemProperty 'bestflashlight.multiplayer.client', 'true'; programArgument '--username'; programArgument 'FlashlightB' }
+        configureEach { systemProperty 'neoforge.enabledGameTestNamespaces', 'bestflashlight'; logLevel = org.slf4j.event.Level.INFO }
+    }
+    mods { bestflashlight { sourceSet sourceSets.main; sourceSet sourceSets.smoke } }
+    unitTest { enable(); testedMod = mods.bestflashlight }
+}
+tasks.named('test', Test) { useJUnitPlatform() }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.withType(AbstractArchiveTask).configureEach { preserveFileTimestamps = false; reproducibleFileOrder = true }
+tasks.named('jar', Jar) { from('LICENSE'); from('NOTICE'); manifest { attributes 'Implementation-Version': project.version } }
+
+// Export launches so the dedicated server and two clients can run concurrently
+// without holding one Gradle build open while starting another.
+tasks.register('prepareMultiplayerSmoke') {
+    dependsOn 'smokeClasses', 'prepareMultiplayerServerRun', 'prepareMultiplayerARun', 'prepareMultiplayerBRun'
+    doLast {
+        def javaPath = javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+        ['multiplayerServer', 'multiplayerA', 'multiplayerB'].each { name ->
+            def runTask = tasks.named('run' + name.capitalize()).get()
+            def command = [javaPath, '-Xmx2G', '-cp', runTask.classpathProvider.asPath] + runTask.allJvmArgs + runTask.args
+            file("build/${name}-command.json").text = groovy.json.JsonOutput.toJson(command)
+        }
+    }
+}
+
+tasks.named('processResources', ProcessResources) {
+    inputs.property 'mod_version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand mod_version: project.version
+    }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "bestflashlight:item/flashlight_off",
+  "textures": {
+    "lens": "minecraft:block/sea_lantern"
+  }
+}

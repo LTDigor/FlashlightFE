@@ -1,0 +1,17 @@
+{
+  "item.bestflashlight.flashlight": "Flashlight",
+  "item.bestflashlight.headband": "Flashlight Headband",
+  "block.bestflashlight.flashlight_light": "Flashlight Beam",
+  "key.bestflashlight.toggle": "Toggle headband flashlight",
+  "key.categories.bestflashlight": "Flashlight FE",
+  "tooltip.bestflashlight.energy": "Charge: %s/%s FE",
+  "tooltip.bestflashlight.on": "Light on",
+  "tooltip.bestflashlight.off": "Light off",
+  "tooltip.bestflashlight.headband.mount": "Mount: combine the headband + flashlight in any crafting slots",
+  "tooltip.bestflashlight.headband.loaded": "Flashlight installed",
+  "tooltip.bestflashlight.headband.unmount": "Remove: craft the loaded headband by itself",
+  "jei.bestflashlight.headband.mounting": "Headlamp: combine an empty headband and a flashlight in any two crafting slots. Their positions do not matter. To remove the flashlight, craft the loaded headband by itself.",
+  "message.bestflashlight.on": "Flashlight switched on",
+  "message.bestflashlight.off": "Flashlight switched off",
+  "key.bestflashlight.handheld": "Toggle handheld flashlight"
+}

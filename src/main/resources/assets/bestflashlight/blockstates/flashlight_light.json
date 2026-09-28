@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "bestflashlight:block/flashlight_light"
+    }
+  }
+}
