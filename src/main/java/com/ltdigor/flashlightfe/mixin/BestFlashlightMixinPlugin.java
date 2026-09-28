@@ -13,6 +13,10 @@ public final class BestFlashlightMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1).startsWith("Iris")) {
+            return BestFlashlightMixinPlugin.class.getClassLoader()
+                .getResource("net/irisshaders/iris/Iris.class") != null;
+        }
         return !mixinClassName.endsWith("CuriosCommonEventsMixin") || curiosPresent();
     }
 

@@ -84,6 +84,14 @@ neoForge {
             systemProperty 'bestflashlight.beamSmoke.stages', providers.gradleProperty('beamSmokeStages').getOrElse('')
             programArgument '--username'; programArgument 'BeamSmoke'
         }
+        shaderBeamSmoke {
+            client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]
+            gameDirectory = file('run-shader-smoke')
+            systemProperty 'bestflashlight.shaderSmoke', 'true'
+            systemProperty 'bestflashlight.shaderBeam.disabled', providers.gradleProperty('shaderBeamBaseline').getOrElse('false')
+            systemProperty 'bestflashlight.shaderSmoke.cases', providers.gradleProperty('shaderBeamCases').getOrElse('')
+            programArgument '--username'; programArgument 'ShaderBeamSmoke'
+        }
         clientReloadSmoke { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-smoke'); systemProperty 'bestflashlight.smoke', 'true'; systemProperty 'bestflashlight.smoke.reload', 'true'; programArgument '--username'; programArgument 'FlashlightSmoke' }
         multiplayerServer { server(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-multiplayer-server'); systemProperty 'bestflashlight.multiplayer.server', 'true'; programArgument '--nogui' }
         multiplayerA { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-a'); systemProperty 'bestflashlight.multiplayer.client', 'true'; programArgument '--username'; programArgument 'FlashlightA' }
