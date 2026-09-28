@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": ["SWS", "IGI", "CRC"],
+  "key": {
+    "S": {"item": "minecraft:string"},
+    "W": {"tag": "minecraft:wool"},
+    "I": {"item": "minecraft:iron_ingot"},
+    "G": {"item": "minecraft:glass"},
+    "C": {"item": "minecraft:copper_ingot"},
+    "R": {"item": "minecraft:redstone"}
+  },
+  "result": {"id": "bestflashlight:headlamp", "count": 1}
+}

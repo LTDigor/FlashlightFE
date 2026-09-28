@@ -10,7 +10,7 @@ modId="bestflashlight"
 version="${mod_version}"
 displayName="Flashlight FE"
 authors="LTDigor"
-description='''A rechargeable handheld flashlight with a removable headband mount, directional lighting, and Curios support.'''
+description='''Rechargeable handheld and head-mounted flashlights with configurable directional lighting and optional Curios support.'''
 
 [[dependencies.bestflashlight]]
 modId="neoforge"

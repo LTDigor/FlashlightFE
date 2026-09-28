@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / 'src/main/resources/assets/bestflashlight'
 MODELS = ASSETS / 'models/item'
 NAMES = ('flashlight', 'flashlight_off', 'flashlight_on', 'flashlight_button',
-         'headband', 'headband_empty', 'headband_loaded', 'headband_loaded_on')
+         'headlamp', 'headlamp_off', 'headlamp_on')
 CONTEXTS = ('gui', 'ground', 'fixed', 'firstperson_righthand', 'firstperson_lefthand',
             'thirdperson_righthand', 'thirdperson_lefthand', 'head')
 
@@ -72,8 +72,8 @@ def png(path):
 
 
 class ModelAssetsTest(unittest.TestCase):
-    def test_headband_uses_own_materials(self):
-        for texture in resolve('headband_empty')['textures'].values():
+    def test_headlamp_uses_own_materials(self):
+        for texture in resolve('headlamp_off')['textures'].values():
             self.assertTrue(texture.startswith('bestflashlight:'), texture)
 
     def test_all_models_use_local_textures_and_valid_uvs(self):
@@ -108,19 +108,15 @@ class ModelAssetsTest(unittest.TestCase):
         self.assertEqual([{'predicate': {'bestflashlight:enabled': 1},
                            'model': 'bestflashlight:item/flashlight_on'}], load('flashlight')['overrides'])
 
-    def test_headband_override_requires_mounted_and_enabled(self):
-        overrides = load('headband')['overrides']
-        for mounted, enabled, expected in ((0, 0, 'headband_empty'), (0, 1, 'headband_empty'),
-                                            (1, 0, 'headband_loaded'), (1, 1, 'headband_loaded_on')):
-            actual = load('headband')['parent'].split('/')[-1]
-            values = {'bestflashlight:mounted': mounted, 'bestflashlight:enabled': enabled}
-            for override in overrides:
-                if all(values[key] >= value for key, value in override['predicate'].items()):
-                    actual = override['model'].split('/')[-1]
-            self.assertEqual(expected, actual)
+    def test_headlamp_has_only_enabled_override(self):
+        self.assertEqual('bestflashlight:item/headlamp_off', load('headlamp')['parent'])
+        self.assertEqual([{'predicate': {'bestflashlight:enabled': 1},
+                           'model': 'bestflashlight:item/headlamp_on'}], load('headlamp')['overrides'])
+        for old in ('headband', 'headband_empty', 'headband_loaded', 'headband_loaded_on'):
+            self.assertFalse((MODELS / (old + '.json')).exists(), old)
 
     def test_switching_changes_only_lens_material_and_face_light(self):
-        for off, on in (('flashlight_off', 'flashlight_on'), ('headband_loaded', 'headband_loaded_on')):
+        for off, on in (('flashlight_off', 'flashlight_on'), ('headlamp_off', 'headlamp_on')):
             a, b = resolve(off), resolve(on)
             self.assertEqual(a['display'], b['display'])
             self.assertNotEqual(a['textures']['lens'], b['textures']['lens'])
@@ -139,7 +135,7 @@ class ModelAssetsTest(unittest.TestCase):
             self.assertEqual(a['textures'], b['textures'])
 
     def test_lenses_are_recessed_and_face_forward(self):
-        for name in ('flashlight_off', 'headband_loaded'):
+        for name in ('flashlight_off', 'headlamp_off'):
             elements = resolve(name)['elements']
             lens = next(e for e in elements if e['name'] == 'lens')
             rim = next(e for e in elements if e['name'] == 'bezel_front')
@@ -148,7 +144,7 @@ class ModelAssetsTest(unittest.TestCase):
             self.assertLess(lens['to'][2], 8)
 
     def test_octagons_have_eight_side_faces_not_intersecting_square_solids(self):
-        for name, prefix in (('flashlight_off', 'grip_side_'), ('headband_loaded', 'housing_side_')):
+        for name, prefix in (('flashlight_off', 'grip_side_'), ('headlamp_off', 'housing_side_')):
             sides = [e for e in resolve(name)['elements'] if e['name'].startswith(prefix)]
             self.assertEqual(8, len(sides))
             self.assertTrue(all(len(e['faces']) == 1 for e in sides))
@@ -165,7 +161,7 @@ class ModelAssetsTest(unittest.TestCase):
             self.assertEqual(z, elements[name]['to'][2])
 
     def test_headlamp_closes_its_back_above_and_below_the_mount(self):
-        elements = {e['name']: e for e in resolve('headband_loaded')['elements']}
+        elements = {e['name']: e for e in resolve('headlamp_off')['elements']}
         self.assertIn('housing_back', elements)
         back = elements['housing_back']
         self.assertEqual({'south'}, set(back['faces']))
@@ -192,26 +188,48 @@ class ModelAssetsTest(unittest.TestCase):
         self.assertEqual(plate['from'][0], plate['to'][0])
         self.assertGreaterEqual(plate['from'][0] - grip['from'][0], .01 - 1e-9)
 
-    def test_headband_fits_outer_skin_layer_and_sits_above_eyes(self):
-        empty = resolve('headband_empty')['elements']
-        strap = {e['name']: e for e in empty if e['name'].startswith('strap_')}
+    def test_headlamp_fits_outer_skin_layer_and_sits_above_eyes(self):
+        elements = resolve('headlamp_off')['elements']
+        strap = {e['name']: e for e in elements if e['name'].startswith('strap_')}
         self.assertLess(strap['strap_front']['to'][2], 3.5)
         self.assertGreater(strap['strap_back']['from'][2], 12.5)
         self.assertLess(strap['strap_left']['to'][0], 3.5)
         self.assertGreater(strap['strap_right']['from'][0], 12.5)
-        for element in resolve('headband_loaded')['elements']:
+        for element in elements:
             self.assertGreaterEqual(element['from'][1], 12, element['name'])
-        self.assertFalse(any(e['name'].startswith('battery') for e in empty))
-        self.assertTrue(any(e['name'] == 'battery' for e in resolve('headband_loaded')['elements']))
+        self.assertTrue(any(e['name'] == 'battery' for e in elements))
+        self.assertEqual([0, 0, 0], resolve('headlamp_off')['display']['head']['rotation'])
+
+    def test_headlamp_head_transform_clears_vanilla_head(self):
+        elements = {e['name']: e for e in resolve('headlamp_off')['elements']}
+        display = resolve('headlamp_off')['display']['head']
+        self.assertEqual([0, 0, 0], display['rotation'])
+
+        # CustomHeadLayer: translate Y -.25, rotate Y 180, scale (.625, -.625, -.625).
+        # Item coordinates are centered on 8 and display translations use sixteenths.
+        def world(axis, value):
+            index = 'xyz'.index(axis)
+            item = (value - 8) * display['scale'][index] / 16 + display['translation'][index] / 16
+            return (-.625 if axis == 'x' else .625 if axis == 'z' else -.625) * item \
+                + (-.25 if axis == 'y' else 0)
+
+        sides = (world('x', elements['strap_left']['from'][0]),
+                 world('x', elements['strap_right']['to'][0]))
+        self.assertLess(min(sides), -.25)
+        self.assertGreater(max(sides), .25)
+        self.assertLess(world('z', elements['strap_front']['from'][2]), -.25)
+        self.assertGreater(world('z', elements['strap_back']['to'][2]), .25)
+        self.assertLess(world('z', elements['lens']['from'][2]), -.35)
+        self.assertTrue(-.5 < world('y', 13.9) < -.25, 'Lamp should sit on forehead')
 
     def test_models_have_all_display_contexts_and_small_face_budgets(self):
-        for name in ('flashlight_off', 'headband_empty'):
+        for name in ('flashlight_off', 'headlamp_off'):
             display = resolve(name)['display']
             self.assertEqual(set(CONTEXTS), set(display))
             for transform in display.values():
                 self.assertTrue(all(math.isfinite(x) for key in transform for x in transform[key]))
                 self.assertTrue(all(0 < x <= 2 for x in transform['scale']))
-        for body, extra in (('flashlight_off', 'flashlight_button'), ('headband_loaded', None)):
+        for body, extra in (('flashlight_off', 'flashlight_button'), ('headlamp_off', None)):
             count = sum(len(e['faces']) for e in resolve(body)['elements'])
             if extra:
                 count += sum(len(e['faces']) for e in resolve(extra)['elements'])
@@ -237,6 +255,29 @@ class ModelAssetsTest(unittest.TestCase):
         process = subprocess.run([sys.executable, str(ROOT / 'scripts/generate_model_assets.py'), '--check'],
                                  cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(0, process.returncode, process.stdout + process.stderr)
+
+    def test_headlamp_recipe_and_curios_tag(self):
+        data = ROOT / 'src/main/resources/data'
+        recipe = json.loads((data / 'bestflashlight/recipe/headlamp.json').read_text())
+        self.assertEqual('minecraft:crafting_shaped', recipe['type'])
+        self.assertEqual(['SWS', 'IGI', 'CRC'], recipe['pattern'])
+        self.assertEqual({'S': {'item': 'minecraft:string'}, 'W': {'tag': 'minecraft:wool'},
+                          'I': {'item': 'minecraft:iron_ingot'}, 'G': {'item': 'minecraft:glass'},
+                          'C': {'item': 'minecraft:copper_ingot'}, 'R': {'item': 'minecraft:redstone'}}, recipe['key'])
+        self.assertEqual({'id': 'bestflashlight:headlamp', 'count': 1}, recipe['result'])
+        self.assertEqual({'replace': False, 'values': ['bestflashlight:headlamp']},
+                         json.loads((data / 'curios/tags/item/head.json').read_text()))
+        for old in ('bestflashlight/recipe/headband.json', 'bestflashlight/recipe/headband_mount.json',
+                    'bestflashlight/tags/item/headband.json'):
+            self.assertFalse((data / old).exists(), old)
+
+    def test_translations_have_standalone_headlamp(self):
+        for locale in ('en_us', 'ru_ru', 'zh_cn'):
+            values = json.loads((ASSETS / 'lang' / (locale + '.json')).read_text())
+            self.assertIn('item.bestflashlight.headlamp', values)
+            self.assertTrue(values['item.bestflashlight.headlamp'])
+            self.assertIn('key.bestflashlight.toggle', values)
+            self.assertFalse(any('headband' in key or 'mount' in key for key in values), locale)
 
 
 if __name__ == '__main__':

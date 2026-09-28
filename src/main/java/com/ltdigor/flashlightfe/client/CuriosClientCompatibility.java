@@ -13,7 +13,7 @@ final class CuriosClientCompatibility {
         try {
             Class<?> registry = Class.forName("top.theillusivec4.curios.api.client.CuriosRendererRegistry");
             registry.getMethod("register", Item.class, Supplier.class)
-                .invoke(null, FlashlightMod.HEADBAND.get(), (Supplier<Object>) HeadbandRenderer::createProxy);
+                .invoke(null, FlashlightMod.HEADLAMP.get(), (Supplier<Object>) HeadlampRenderer::createProxy);
         } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException exception) {
             throw new IllegalStateException("Curios is installed but Flashlight FE renderer could not initialize", exception);
         }

@@ -17,33 +17,23 @@ class FlashlightEquipmentSyncTest {
         assertTrue(FlashlightEquipmentSync.isEnergyOnlyChange(before, after));
     }
 
-    @Test void nestedHeadbandEnergyOnlyChangeIsIgnoredForCuriosTracking() {
-        ItemStack beforeLamp = new ItemStack(FlashlightMod.FLASHLIGHT.get());
-        beforeLamp.set(LampData.ENERGY.get(), 100);
-        ItemStack afterLamp = beforeLamp.copy();
-        afterLamp.set(LampData.ENERGY.get(), 99);
+    @Test void directHeadlampEnergyOnlyChangeIsIgnoredForCuriosTracking() {
+        ItemStack before = new ItemStack(FlashlightMod.HEADLAMP.get());
+        before.set(LampData.ENERGY.get(), 100);
+        ItemStack after = before.copy();
+        after.set(LampData.ENERGY.get(), 99);
 
-        ItemStack beforeBand = new ItemStack(FlashlightMod.HEADBAND.get());
-        ItemStack afterBand = new ItemStack(FlashlightMod.HEADBAND.get());
-        LampData.mount(beforeBand, beforeLamp);
-        LampData.mount(afterBand, afterLamp);
-
-        assertTrue(FlashlightEquipmentSync.isEnergyOnlyChange(beforeBand, afterBand));
+        assertTrue(FlashlightEquipmentSync.isEnergyOnlyChange(before, after));
     }
 
-    @Test void nestedHeadbandEnabledChangeStillSyncs() {
-        ItemStack beforeLamp = new ItemStack(FlashlightMod.FLASHLIGHT.get());
-        beforeLamp.set(LampData.ENERGY.get(), 100);
-        ItemStack afterLamp = beforeLamp.copy();
-        afterLamp.set(LampData.ENERGY.get(), 99);
-        LampData.setEnabled(afterLamp, true);
+    @Test void directHeadlampEnabledChangeStillSyncs() {
+        ItemStack before = new ItemStack(FlashlightMod.HEADLAMP.get());
+        before.set(LampData.ENERGY.get(), 100);
+        ItemStack after = before.copy();
+        after.set(LampData.ENERGY.get(), 99);
+        LampData.setEnabled(after, true);
 
-        ItemStack beforeBand = new ItemStack(FlashlightMod.HEADBAND.get());
-        ItemStack afterBand = new ItemStack(FlashlightMod.HEADBAND.get());
-        LampData.mount(beforeBand, beforeLamp);
-        LampData.mount(afterBand, afterLamp);
-
-        assertFalse(FlashlightEquipmentSync.isEnergyOnlyChange(beforeBand, afterBand));
+        assertFalse(FlashlightEquipmentSync.isEnergyOnlyChange(before, after));
     }
 
     @Test void advancingDirectEnergySnapshotChangesOnlyEnergy() {

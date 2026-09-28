@@ -31,7 +31,7 @@ public final class FlashlightClientEvents {
     public static final KeyMapping HANDHELD = new KeyMapping("key.bestflashlight.handheld", KeyConflictContext.IN_GAME,
         InputConstants.Type.MOUSE, GLFW.GLFW_MOUSE_BUTTON_RIGHT, "key.categories.bestflashlight");
     // Retaining this ID preserves the user's existing options.txt binding.
-    public static final KeyMapping HEADBAND = new KeyMapping("key.bestflashlight.toggle", KeyConflictContext.IN_GAME,
+    public static final KeyMapping HEADLAMP = new KeyMapping("key.bestflashlight.toggle", KeyConflictContext.IN_GAME,
         InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_I, "key.categories.bestflashlight");
 
     private FlashlightClientEvents() {}
@@ -39,7 +39,7 @@ public final class FlashlightClientEvents {
     @SubscribeEvent
     public static void keys(RegisterKeyMappingsEvent event) {
         event.register(HANDHELD);
-        event.register(HEADBAND);
+        event.register(HEADLAMP);
     }
 
     @SubscribeEvent
@@ -47,9 +47,7 @@ public final class FlashlightClientEvents {
         event.enqueueWork(() -> {
             ItemProperties.register(FlashlightMod.FLASHLIGHT.get(), FlashlightMod.resource("enabled"),
                 (stack, level, entity, seed) -> LampData.enabled(stack) ? 1 : 0);
-            ItemProperties.register(FlashlightMod.HEADBAND.get(), FlashlightMod.resource("mounted"),
-                (stack, level, entity, seed) -> LampData.mounted(stack).isEmpty() ? 0 : 1);
-            ItemProperties.register(FlashlightMod.HEADBAND.get(), FlashlightMod.resource("enabled"),
+            ItemProperties.register(FlashlightMod.HEADLAMP.get(), FlashlightMod.resource("enabled"),
                 (stack, level, entity, seed) -> LampData.enabled(stack) ? 1 : 0);
             if (CuriosCompatibility.isLoaded()) CuriosClientCompatibility.registerRenderer();
         });
@@ -81,8 +79,8 @@ public final class FlashlightClientEvents {
         if (!inGame() || event.getAction() != GLFW.GLFW_PRESS) return;
         if (HANDHELD.matches(event.getKey(), event.getScanCode()) && HANDHELD.isConflictContextAndModifierActive())
             send(handAction());
-        if (HEADBAND.matches(event.getKey(), event.getScanCode()) && HEADBAND.isConflictContextAndModifierActive())
-            send(LampControl.Action.HEADBAND);
+        if (HEADLAMP.matches(event.getKey(), event.getScanCode()) && HEADLAMP.isConflictContextAndModifierActive())
+            send(LampControl.Action.HEADLAMP);
     }
 
     private static void mouse(InputEvent.MouseButton.Pre event) {
@@ -90,8 +88,8 @@ public final class FlashlightClientEvents {
         boolean handled = false;
         if (HANDHELD.matchesMouse(event.getButton()) && HANDHELD.isConflictContextAndModifierActive())
             handled = send(handAction());
-        if (HEADBAND.matchesMouse(event.getButton()) && HEADBAND.isConflictContextAndModifierActive())
-            handled |= send(LampControl.Action.HEADBAND);
+        if (HEADLAMP.matchesMouse(event.getButton()) && HEADLAMP.isConflictContextAndModifierActive())
+            handled |= send(LampControl.Action.HEADLAMP);
         // Pre runs before vanilla marks use/attack down, so a held button cannot repeat use.
         if (handled) event.setCanceled(true);
     }
@@ -102,8 +100,8 @@ public final class FlashlightClientEvents {
         // Also suppress vanilla use when a keyboard binding is shared with Use Item.
         boolean hand = HANDHELD.getKey().equals(use.getKey()) && HANDHELD.isConflictContextAndModifierActive()
             && LampControl.target(Minecraft.getInstance().player, handAction()) != null;
-        boolean head = HEADBAND.getKey().equals(use.getKey()) && HEADBAND.isConflictContextAndModifierActive()
-            && LampControl.target(Minecraft.getInstance().player, LampControl.Action.HEADBAND) != null;
+        boolean head = HEADLAMP.getKey().equals(use.getKey()) && HEADLAMP.isConflictContextAndModifierActive()
+            && LampControl.target(Minecraft.getInstance().player, LampControl.Action.HEADLAMP) != null;
         if (hand || head) {
             event.setCanceled(true);
             event.setSwingHand(false);
@@ -113,7 +111,7 @@ public final class FlashlightClientEvents {
     private static void tick(ClientTickEvent.Post event) {
         // Actions come only from physical press events, never from repeatable click queues.
         while (HANDHELD.consumeClick()) {}
-        while (HEADBAND.consumeClick()) {}
+        while (HEADLAMP.consumeClick()) {}
         OptionalDynamicLights.clientTick();
     }
 

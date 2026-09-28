@@ -3,7 +3,6 @@ package com.ltdigor.flashlightfe.client;
 import com.ltdigor.flashlightfe.FlashlightMod;
 import com.ltdigor.flashlightfe.LampData;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -28,10 +27,9 @@ import net.neoforged.neoforge.client.event.ModelEvent;
 
 /** Curios renderer implementation with no Curios type in its class signature. */
 @EventBusSubscriber(modid = FlashlightMod.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
-final class HeadbandRenderer {
-    private static final ModelResourceLocation EMPTY = model("headband_empty");
-    private static final ModelResourceLocation OFF = model("headband_loaded");
-    private static final ModelResourceLocation ON = model("headband_loaded_on");
+final class HeadlampRenderer {
+    private static final ModelResourceLocation OFF = model("headlamp_off");
+    private static final ModelResourceLocation ON = model("headlamp_on");
     // Only carries the wearer's head pose; all visible geometry lives in the JSON assets.
     private final ModelPart head = LayerDefinition.create(new MeshDefinition(), 16, 16).bakeRoot();
 
@@ -41,7 +39,6 @@ final class HeadbandRenderer {
 
     @SubscribeEvent
     public static void additionalModels(ModelEvent.RegisterAdditional event) {
-        event.register(EMPTY);
         event.register(OFF);
         event.register(ON);
     }
@@ -49,10 +46,10 @@ final class HeadbandRenderer {
     static Object createProxy() {
         try {
             Class<?> renderer = Class.forName("top.theillusivec4.curios.api.client.ICurioRenderer");
-            HeadbandRenderer headband = new HeadbandRenderer();
+            HeadlampRenderer headlamp = new HeadlampRenderer();
             InvocationHandler handler = (proxy, method, arguments) -> {
                 if (method.getName().equals("render")) {
-                    headband.render(arguments);
+                    headlamp.render(arguments);
                     return null;
                 }
                 if (method.isDefault()) return InvocationHandler.invokeDefault(proxy, method, arguments == null ? new Object[0] : arguments);
@@ -72,17 +69,15 @@ final class HeadbandRenderer {
         PoseStack pose = (PoseStack) arguments[2];
         MultiBufferSource buffers = (MultiBufferSource) arguments[4];
         int light = (int) arguments[5];
-        ModelResourceLocation id = LampData.mounted(stack).isEmpty() ? EMPTY : LampData.enabled(stack) ? ON : OFF;
+        ModelResourceLocation id = LampData.enabled(stack) ? ON : OFF;
         Minecraft client = Minecraft.getInstance();
         BakedModel geometry = client.getModelManager().getModel(id);
         pose.pushPose();
         try {
             callCuriosRenderer("followHeadRotations", new Class<?>[]{LivingEntity.class, ModelPart[].class}, entity, new ModelPart[]{head});
-            if (!entity.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) pose.scale(1.15F, 1.15F, 1.15F);
             head.translateAndRotate(pose);
-            // The authored emitter faces -Z while the head mount faces +Z; a Z roll kept the lamp on the nape.
-            pose.mulPose(Axis.YP.rotationDegrees(180));
-            pose.translate(-0.5, -0.5, -0.5);
+            if (!entity.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) pose.scale(1.15F, 1.15F, 1.15F);
+            HeadlampOrientation.apply(pose);
             for (BakedModel pass : geometry.getRenderPasses(stack, true)) {
                 for (RenderType type : pass.getRenderTypes(stack, true)) {
                     client.getItemRenderer().renderModelLists(pass, stack, light, OverlayTexture.NO_OVERLAY,

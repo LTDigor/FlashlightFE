@@ -114,6 +114,7 @@ public final class ClientSmoke {
     @SubscribeEvent public static void tick(ClientTickEvent.Post event) {
         if(!Boolean.getBoolean("bestflashlight.smoke")) return;
         Minecraft mc=Minecraft.getInstance();
+        if (prepared && mc.screen instanceof net.minecraft.client.gui.screens.PauseScreen) mc.setScreen(null);
         if (awaitingBlockUse && mc.screen instanceof AbstractContainerScreen<?>) {
             if (originalHandheldKey == null) blockUseObserved = true;
             else reboundBlockUseObserved = true;
@@ -161,11 +162,11 @@ public final class ClientSmoke {
             if (RELOAD) {
                 serverStep(mc, () -> {
                     var p = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-                    var band = LampSource.headband(p);
+                    var band = LampSource.headlamp(p);
                     if (band.isEmpty() || LampEnergy.stored(band) != savedEnergy || LampData.enabled(band))
                         throw new AssertionError("Saved Curios battery/state did not survive world reload");
-                    if (!LampData.mounted(band).getHoverName().getString().equals("Reload battery"))
-                        throw new AssertionError("Nested custom name did not survive world reload");
+                    if (!band.getHoverName().getString().equals("Reload battery"))
+                        throw new AssertionError("Headlamp custom name did not survive world reload");
                     var off = p.getOffhandItem();
                     if (!FlashlightMod.isFlashlight(off) || LampData.enabled(off) || LampEnergy.stored(off) != 1000)
                         throw new AssertionError("Disabled offhand flashlight charge/state did not survive world reload");
@@ -175,7 +176,7 @@ public final class ClientSmoke {
                 return;
             }
             FlashlightClientEvents.HANDHELD.setKey(InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_RIGHT));
-            FlashlightClientEvents.HEADBAND.setKey(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_I));
+            FlashlightClientEvents.HEADLAMP.setKey(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_I));
             KeyMapping.resetMapping();
             serverStep(mc, () -> {
                 var player=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
@@ -193,7 +194,7 @@ public final class ClientSmoke {
                 ItemStack lamp=new ItemStack(FlashlightMod.FLASHLIGHT.get());
                 lamp.getCapability(Capabilities.EnergyStorage.ITEM).receiveEnergy(10000,false);
                 lamp.set(DataComponents.CUSTOM_NAME, Component.literal("Reload battery"));
-                ItemStack band=new ItemStack(FlashlightMod.HEADBAND.get()); LampData.mount(band,lamp); LampData.setEnabled(band,true);
+                ItemStack band=new ItemStack(FlashlightMod.HEADLAMP.get()); com.ltdigor.flashlightfe.TestLamps.copyState(band,lamp); LampData.setEnabled(band,true);
                 CuriosApi.getCuriosInventory(player).orElseThrow().getCurios().get("head").getStacks().setStackInSlot(0,band);
                 player.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.DIAMOND_HELMET));
             });
@@ -227,19 +228,19 @@ public final class ClientSmoke {
                 for (BlockPos pos : BlockPos.betweenClosed(-6,-59,-7,6,-54,19))
                     if (level.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()))
                         throw new AssertionError("Light remained after world reload at " + pos);
-                if (LampEnergy.stored(LampSource.headband(p)) != savedEnergy) throw new AssertionError("Disabled lamp drained after reload");
+                if (LampEnergy.stored(LampSource.headlamp(p)) != savedEnergy) throw new AssertionError("Disabled lamp drained after reload");
                 LogUtils.getLogger().info("FLASHLIGHT_RELOAD_SMOKE_PASS: saved Curios battery/name/state, chunk reload, scheduled orphan cleanup, water preserved");
                 mc.execute(mc::stop);
             });
             return;
         }
         if(ticks==100) {
-            if(LampSource.headband(mc.player).isEmpty()) throw new AssertionError("Headband did not synchronize to client");
+            if(LampSource.headlamp(mc.player).isEmpty()) throw new AssertionError("Headlamp did not synchronize to client");
             mc.options.setCameraType(CameraType.THIRD_PERSON_FRONT); mc.options.fov().set(40); mc.options.hideGui=true;
         }
-        if(ticks==140) shot(mc,"headband-with-helmet.png");
+        if(ticks==140) shot(mc,"headlamp-with-helmet.png");
         if(ticks==160) serverStep(mc, () -> mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()).setItemSlot(EquipmentSlot.HEAD,ItemStack.EMPTY));
-        if(ticks==200) shot(mc,"headband-forehead.png");
+        if(ticks==200) shot(mc,"headlamp-forehead.png");
         if(ticks==205) {
             resourceReload = mc.reloadResourcePacks();
             resourceReloadDeadlineNanos = System.nanoTime() + 60_000_000_000L;
@@ -248,7 +249,7 @@ public final class ClientSmoke {
         if(ticks==210) { mc.options.keyShift.setDown(true); mc.player.setYRot(45); mc.player.setYHeadRot(45); }
         if(ticks==215) {
             if (!mc.player.isCrouching()) throw new AssertionError("Client sneak key did not produce a crouching capture pose");
-            shot(mc,"headband-sneaking-turned.png"); mc.options.keyShift.setDown(false); mc.player.setYRot(0); mc.player.setYHeadRot(0);
+            shot(mc,"headlamp-sneaking-turned.png"); mc.options.keyShift.setDown(false); mc.player.setYRot(0); mc.player.setYHeadRot(0);
         }
         if(ticks==220) { mc.options.setCameraType(CameraType.FIRST_PERSON); mc.options.fov().set(70); }
         if(ticks==250) shot(mc,"beam-12-blocks-15-degrees.png");
@@ -258,19 +259,19 @@ public final class ClientSmoke {
             postKey(GLFW.GLFW_KEY_I, GLFW.GLFW_RELEASE);
         }
         if(ticks==290) {
-            if(LampData.enabled(LampSource.headband(mc.player))) throw new AssertionError("Raw I press did not turn headlamp off or repeated while held");
+            if(LampData.enabled(LampSource.headlamp(mc.player))) throw new AssertionError("Raw I press did not turn headlamp off or repeated while held");
             mc.setScreen(new ChatScreen(""));
             postKey(GLFW.GLFW_KEY_I, GLFW.GLFW_PRESS);
             mc.setScreen(null);
             postKey(GLFW.GLFW_KEY_I, GLFW.GLFW_PRESS);
         }
         if(ticks==310) {
-            if(!LampData.enabled(LampSource.headband(mc.player))) throw new AssertionError("Chat-filtered raw I press did not leave one accepted headband toggle");
-            if(LampEnergy.stored(LampSource.headband(mc.player)) != 10000)
+            if(!LampData.enabled(LampSource.headlamp(mc.player))) throw new AssertionError("Chat-filtered raw I press did not leave one accepted headlamp toggle");
+            if(LampEnergy.stored(LampSource.headlamp(mc.player)) != 10000)
                 throw new AssertionError("Creative headlamp changed FE while rendering and toggling");
             serverStep(mc, () -> {
                 var player = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-                LampData.setEnabled(LampSource.headband(player), false);
+                LampData.setEnabled(LampSource.headlamp(player), false);
                 ItemStack lamp = new ItemStack(FlashlightMod.FLASHLIGHT.get());
                 lamp.getCapability(Capabilities.EnergyStorage.ITEM).receiveEnergy(1000, false);
                 player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE));
@@ -425,10 +426,10 @@ public final class ClientSmoke {
                 var player = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
                 player.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
                 LampData.setEnabled(player.getOffhandItem(), false);
-                var band = LampSource.headband(player);
+                var band = LampSource.headlamp(player);
                 LampData.setEnabled(band, false);
                 savedEnergy = LampEnergy.stored(band);
-                if (savedEnergy != 10000) throw new AssertionError("Creative headband must preserve full server energy");
+                if (savedEnergy != 10000) throw new AssertionError("Creative headlamp must preserve full server energy");
                 var level = player.serverLevel();
                 for (var direction : net.minecraft.core.Direction.values())
                     level.setBlock(WATER_ORPHAN.relative(direction), Blocks.STONE.defaultBlockState(), 3);
@@ -446,11 +447,11 @@ public final class ClientSmoke {
         Screenshot.grab(mc.gameDirectory,name,mc.getMainRenderTarget(),message -> LogUtils.getLogger().info("Screenshot: {}",message.getString()));
     }
     private static void assertRenderers(Minecraft mc) {
-        if(CuriosRendererRegistry.getRenderer(FlashlightMod.HEADBAND.get()).isEmpty()) throw new AssertionError("Missing headband renderer");
-        if(mc.getItemRenderer().getModel(new ItemStack(FlashlightMod.HEADBAND.get()),null,null,0)==mc.getModelManager().getMissingModel())
-            throw new AssertionError("Missing headband item model");
+        if(CuriosRendererRegistry.getRenderer(FlashlightMod.HEADLAMP.get()).isEmpty()) throw new AssertionError("Missing headlamp renderer");
+        if(mc.getItemRenderer().getModel(new ItemStack(FlashlightMod.HEADLAMP.get()),null,null,0)==mc.getModelManager().getMissingModel())
+            throw new AssertionError("Missing headlamp item model");
         assertModel(mc, ModelResourceLocation.inventory(FlashlightMod.resource("flashlight")), "flashlight inventory");
-        for (String name : new String[] {"flashlight_button", "headband_empty", "headband_loaded", "headband_loaded_on"})
+        for (String name : new String[] {"flashlight_button", "headlamp_off", "headlamp_on"})
             assertModel(mc, ModelResourceLocation.standalone(FlashlightMod.resource("item/" + name)), name);
     }
     private static void assertModel(Minecraft mc, ModelResourceLocation id, String name) {

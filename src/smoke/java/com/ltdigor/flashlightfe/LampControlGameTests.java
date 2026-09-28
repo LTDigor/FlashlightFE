@@ -30,8 +30,8 @@ public class LampControlGameTests {
                 "Hand use must prefer main-hand flashlight");
             helper.assertTrue("main".equals(LampControl.target(player, LampControl.Action.HAND_KEY)),
                 "Hand key must prefer main-hand flashlight");
-            helper.assertTrue("headband".equals(LampControl.target(player, LampControl.Action.HEADBAND)),
-                "Headband key must target headband independently");
+            helper.assertTrue("headlamp".equals(LampControl.target(player, LampControl.Action.HEADLAMP)),
+                "Headlamp key must target headlamp independently");
 
             player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE));
             helper.assertTrue(LampControl.target(player, LampControl.Action.HAND_USE) == null,
@@ -46,8 +46,8 @@ public class LampControlGameTests {
             helper.assertTrue(LampControl.target(player, LampControl.Action.HAND_USE) == null
                     && LampControl.target(player, LampControl.Action.HAND_KEY) == null,
                 "Hand actions must reject missing inventory targets");
-            helper.assertTrue("headband".equals(LampControl.target(player, LampControl.Action.HEADBAND)),
-                "Hand inventory changes must not affect headband action");
+            helper.assertTrue("headlamp".equals(LampControl.target(player, LampControl.Action.HEADLAMP)),
+                "Hand inventory changes must not affect headlamp action");
         } finally {
             player.discard();
         }
@@ -79,8 +79,8 @@ public class LampControlGameTests {
 
             ItemStack band = band();
             head(player).setStackInSlot(0, band);
-            helper.assertTrue(LampControl.press(player, LampControl.Action.HEADBAND) == 1 && LampData.enabled(band),
-                "Creative headband action must toggle zero-charge mounted lamp");
+            helper.assertTrue(LampControl.press(player, LampControl.Action.HEADLAMP) == 1 && LampData.enabled(band),
+                "Creative headlamp action must toggle zero-charge mounted lamp");
         } finally {
             player.discard();
         }
@@ -105,8 +105,8 @@ public class LampControlGameTests {
     }
 
     private static ItemStack band() {
-        ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get());
-        LampData.mount(band, lamp());
+        ItemStack band = new ItemStack(FlashlightMod.HEADLAMP.get());
+        com.ltdigor.flashlightfe.TestLamps.copyState(band, lamp());
         return band;
     }
 

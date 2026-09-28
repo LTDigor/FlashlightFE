@@ -58,28 +58,33 @@ public final class MultiplayerSmoke {
             require(LampData.enabled(second.getMainHandItem()) && LampEnergy.stored(second.getMainHandItem())>0,
                 "Survival handheld press must enable partial-charge lamp");
         }
-        if (ticks==40) {
+        // Default 0.025 FE/tick bills one whole FE every 40 world ticks.
+        // Observe longer than that period, regardless of the world's starting phase.
+        if (ticks==80) {
+            if (Boolean.getBoolean("bestflashlight.multiplayer.mixed"))
+                require(DynamicLightCoordination.useServerFallback(first) && DynamicLightCoordination.useServerFallback(second),
+                    "Mixed real clients must retain fallback for their shared dimension");
             var shared=carriers(level);
             require(!shared.isEmpty(), "Real players did not produce a shared beam");
             waterLights=new HashSet<>(shared.keySet());
             require(LampEnergy.stored(first.getMainHandItem())==0,"Creative remote player's handheld changed FE");
             require(LampEnergy.stored(second.getMainHandItem())<100,"Survival remote player's handheld did not drain");
-            require(LampEnergy.stored(LampSource.headband(first))==10000,"Creative remote player's headband changed FE");
+            require(LampEnergy.stored(LampSource.headlamp(first))==10000,"Creative remote player's headlamp changed FE");
             LampData.setEnabled(first.getMainHandItem(), false);
             LampData.setEnabled(second.getMainHandItem(), false);
-            removed=LampSource.headband(first); removedEnergy=LampEnergy.stored(removed);
+            removed=LampSource.headlamp(first); removedEnergy=LampEnergy.stored(removed);
             slot(first).setStackInSlot(0,ItemStack.EMPTY);
         }
-        if (ticks==60) {
+        if (ticks==100) {
             require(!carriers(level).isEmpty(), "Unequip removed another player's beam or left stale carriers");
-            require(LampEnergy.stored(removed)==removedEnergy,"Unequipped remote headband consumed energy");
+            require(LampEnergy.stored(removed)==removedEnergy,"Unequipped remote headlamp consumed energy");
             slot(first).setStackInSlot(0,removed);
         }
-        if (ticks==80) {
-            require(!carriers(level).isEmpty(), "Re-equipped headband did not restore the shared beam");
+        if (ticks==120) {
+            require(!carriers(level).isEmpty(), "Re-equipped headlamp did not restore the shared beam");
             server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),"kill FlashlightA");
         }
-        if (ticks==100) {
+        if (ticks==140) {
             require(!first.isAlive(),"Death fixture failed");
             require(!carriers(level).isEmpty(),"Death removed the surviving player's beam");
             ServerLevel nether = server.getLevel(Level.NETHER);
@@ -88,14 +93,14 @@ public final class MultiplayerSmoke {
             nether.setBlock(new BlockPos(0, 98, 0), Blocks.STONE.defaultBlockState(), 3);
             second.teleportTo(nether,.5,99,.5,Set.of(),0,0);
         }
-        if (ticks==120) {
+        if (ticks==160) {
             require(carriers(level).isEmpty(),"Dimension change left overworld carriers");
             for (var pos : waterLights) require(level.getBlockState(pos).is(Blocks.WATER) && level.getFluidState(pos).isSource(),"Water lost after two players left: "+pos);
             require(!carriers(second.serverLevel(), NETHER_BOX).isEmpty(),"Lamp did not resume in destination dimension");
             netherLights=new HashSet<>(carriers(second.serverLevel(), NETHER_BOX).keySet());
             second.connection.disconnect(Component.literal("Flashlight multiplayer logout probe"));
         }
-        if (ticks==150) {
+        if (ticks==190) {
             var nether=server.getLevel(Level.NETHER);
             require(carriers(nether, NETHER_BOX).isEmpty(),"Logout left nether carriers");
             for (var pos : netherLights) require(!nether.getBlockState(pos).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),"Logout left temporary light");
@@ -109,8 +114,8 @@ public final class MultiplayerSmoke {
     private static void equip(ServerPlayer p) {
         ItemStack lamp=new ItemStack(FlashlightMod.FLASHLIGHT.get());
         lamp.getCapability(Capabilities.EnergyStorage.ITEM).receiveEnergy(10000,false);
-        ItemStack band=new ItemStack(FlashlightMod.HEADBAND.get());
-        LampData.mount(band,lamp); LampData.setEnabled(band,true); slot(p).setStackInSlot(0,band);
+        ItemStack band=new ItemStack(FlashlightMod.HEADLAMP.get());
+        com.ltdigor.flashlightfe.TestLamps.copyState(band,lamp); LampData.setEnabled(band,true); slot(p).setStackInSlot(0,band);
     }
     private static void equipHand(ServerPlayer p, int energy) {
         ItemStack lamp=new ItemStack(FlashlightMod.FLASHLIGHT.get());

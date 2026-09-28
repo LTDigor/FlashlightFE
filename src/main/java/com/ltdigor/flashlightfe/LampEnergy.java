@@ -7,7 +7,7 @@ import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 
-/** Item-bound receiving-only FE adapter. Nested changes replace the immutable component. */
+/** Item-bound receiving-only FE adapter. */
 public final class LampEnergy implements IEnergyStorage {
     public static final int BAR_COLOR = 0x00FF00;
 
@@ -31,15 +31,12 @@ public final class LampEnergy implements IEnergyStorage {
     }
 
     public static int stored(ItemStack stack) {
-        if (stack.getItem() instanceof HeadbandItem) return stored(LampData.mounted(stack));
-        return Math.clamp(stack.getOrDefault(LampData.ENERGY.get(), 0), 0, FlashlightConfig.ENERGY_CAPACITY.get());
+        return LampData.isLamp(stack)
+            ? Math.clamp(stack.getOrDefault(LampData.ENERGY.get(), 0), 0, FlashlightConfig.ENERGY_CAPACITY.get()) : 0;
     }
 
     private static void setStored(ItemStack stack, int amount) {
-        if (stack.getItem() instanceof HeadbandItem) {
-            ItemStack lamp = LampData.mounted(stack);
-            if (!lamp.isEmpty()) { setStored(lamp, amount); LampData.mount(stack, lamp); }
-        } else {
+        if (LampData.isLamp(stack)) {
             stack.set(LampData.ENERGY.get(), Math.clamp(amount, 0, FlashlightConfig.ENERGY_CAPACITY.get()));
         }
     }

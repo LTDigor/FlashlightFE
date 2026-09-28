@@ -42,7 +42,6 @@ public final class FlashlightServerEvents {
         if (event.getEntity() instanceof ServerPlayer player) {
             ServerBeamLightingManager.get().removePlayer(player);
             DynamicLightCoordination.left(player);
-            LampSource.resetLegacyCheck(player.getUUID());
         }
     }
 
@@ -79,6 +78,5 @@ public final class FlashlightServerEvents {
     public static void onServerStopped(ServerStoppedEvent event) {
         ServerBeamLightingManager.get().serverStopped(event.getServer());
         DynamicLightCoordination.reset();
-        LampSource.clearLegacyChecks();
     }
 }

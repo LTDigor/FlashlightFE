@@ -66,7 +66,9 @@ def validate_jar(path, version):
         if len(names) != len(set(names)):
             raise ValueError('Duplicate JAR entries')
         forbidden = [name for name in names if re.search(r'(GameTests|Smoke|Test)(?:\$[^/]*)?\.class$', name)
-                     or name.startswith(('org/junit/', 'data/bestflashlight/structure/', 'data/bestflashlight/gametest/'))]
+                     or name.startswith(('org/junit/', 'data/bestflashlight/structure/', 'data/bestflashlight/gametest/'))
+                     or re.search(r'(?:^|/)curios/(?:slots|entities)/', name)
+                     or name == 'compatibility-fixture.txt']
         if forbidden:
             raise ValueError(f'Test resources in release JAR: {forbidden}')
         metadata = tomllib.loads(jar.read('META-INF/neoforge.mods.toml').decode())

@@ -29,7 +29,7 @@ class OptionalCuriosClassloadingTest {
                 () -> Class.forName("top.theillusivec4.curios.api.CuriosApi", false, loader));
             assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.CuriosCompatibility", true, loader));
             assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.FlashlightItem", true, loader));
-            assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.HeadbandItem", true, loader));
+            assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.HeadlampItem", true, loader));
             assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.LampSource", true, loader));
             assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.mixin.CuriosCommonEventsMixin", true, loader));
             assertDoesNotThrow(() -> Class.forName("com.ltdigor.flashlightfe.mixin.BestFlashlightMixinPlugin", true, loader));

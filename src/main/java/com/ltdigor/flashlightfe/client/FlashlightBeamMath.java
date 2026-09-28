@@ -5,10 +5,7 @@ import net.minecraft.world.phys.Vec3;
 /** Pure beam geometry kept separate from rendering so it can be unit-tested. */
 final class FlashlightBeamMath {
     private static final double MIN_CONE_RADIUS = 0.875;
-    // LDL's native held lights fade 15 levels over 7.75 blocks. A sub-block
-    // angular penumbra aliases into bright squares on the same block-centre grid.
-    private static final double LIGHT_FALLOFF = 15.0 / 7.75;
-    private static final double CORE_FRACTION = 0.68;
+    private static final double NEAR_FIELD_BACKWARD = 0.5;
 
     private FlashlightBeamMath() {}
 
@@ -77,31 +74,48 @@ final class FlashlightBeamMath {
      * camera must still have at least one sample point inside the beam.
      */
     static double coneLuminance(Vec3 origin, Vec3 axis, Vec3 point, double range, double halfAngle) {
+        return coneLuminance(origin, axis, point, range, halfAngle, 15, 0.35);
+    }
+
+    static double coneLuminance(Vec3 origin, Vec3 axis, Vec3 point, double range,
+                                double halfAngle, int brightness, double softness) {
         if (origin == null || axis == null || point == null || axis.lengthSqr() < 1.0E-12 || range <= 0.0) return 0.0;
 
         Vec3 delta = point.subtract(origin);
         return sampleLuminance(delta.x, delta.y, delta.z, axis.normalize(), range,
-            Math.tan(Math.clamp(halfAngle, Math.toRadians(0.5), Math.toRadians(45))));
+            Math.tan(Math.clamp(halfAngle, Math.toRadians(0.5), Math.toRadians(45))), brightness, softness);
     }
 
     /** Allocation-free inner loop; axis is normalized and slope is tan(halfAngle). */
-    static double sampleLuminance(double x, double y, double z, Vec3 axis, double range, double slope) {
+    static double sampleLuminance(double x, double y, double z, Vec3 axis, double range,
+                                  double slope, int brightness, double softness) {
         double forward = x * axis.x + y * axis.y + z * axis.z;
-        if (forward < 0 || forward > range || range <= 0) return 0;
+        if (forward <= -NEAR_FIELD_BACKWARD || forward > range || range <= 0) return 0;
         double radialSquared = Math.max(0, x * x + y * y + z * z - forward * forward);
-        double coreRadius = CORE_FRACTION * Math.max(MIN_CONE_RADIUS, forward * slope);
-        double peak = 15.0 * (1.0 - 0.30 * forward / range);
-        double outerRadius = coreRadius + peak / LIGHT_FALLOFF;
-        if (radialSquared >= outerRadius * outerRadius) return 0;
-        double radialFalloff = Math.max(0, Math.sqrt(radialSquared) - coreRadius) * LIGHT_FALLOFF;
-        // Fade toward the range plane as well; crossing it must not drop a bright
-        // sample straight to zero during flight.
-        return Math.max(0, Math.min(peak - radialFalloff, (range - forward) * LIGHT_FALLOFF));
+        double radius = Math.max(MIN_CONE_RADIUS, Math.max(0.0, forward) * slope);
+        if (radialSquared >= radius * radius) return 0;
+        double peak = Math.clamp(brightness, 1, 15);
+        double edgeWidth = Math.clamp(softness, 0.0, 1.0);
+        double radial = Math.sqrt(radialSquared) / radius;
+        double radialFactor = edgeWidth <= 0 ? 1.0
+            : Math.pow(1.0 - radial * radial, 2.0 * edgeWidth)
+                * smoothstep(Math.min(1.0, (1.0 - radial) / edgeWidth));
+        double endWidth = Math.min(range, Math.max(1.0, range * 0.2));
+        double axialFactor = smoothstep(Math.min(1.0, (range - forward) / endWidth));
+        // A block centre immediately behind the emitter can be the only air sample
+        // before a close wall. Fade that sub-block near field to zero at half a block.
+        double nearFactor = forward < 0
+            ? smoothstep((forward + NEAR_FIELD_BACKWARD) / NEAR_FIELD_BACKWARD) : 1.0;
+        return peak * radialFactor * axialFactor * nearFactor;
     }
 
-    /** Conservative radius including the native-light-like soft spill. */
+    private static double smoothstep(double t) {
+        return t * t * (3.0 - 2.0 * t);
+    }
+
+    /** Cone radius with a small bounded near field for block-centre samples. */
     static double illuminationRadius(double forward, double halfAngle) {
-        return CORE_FRACTION * coneRadius(forward, halfAngle) + 15.0 / LIGHT_FALLOFF;
+        return coneRadius(forward, halfAngle);
     }
 
 }

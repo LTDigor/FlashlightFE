@@ -39,11 +39,11 @@ public class EnergyGameTests {
         try {
             for (ItemStack lamp : lampTypes()) {
                 String target;
-                if (lamp.getItem() instanceof HeadbandItem) {
+                if (lamp.getItem() instanceof HeadlampItem) {
                     var head = top.theillusivec4.curios.api.CuriosApi.getCuriosInventory(player).orElseThrow()
                         .getCurios().get("head").getStacks();
                     head.setStackInSlot(0, lamp);
-                    target = "headband";
+                    target = "headlamp";
                 } else {
                     player.setItemSlot(EquipmentSlot.MAINHAND, lamp);
                     target = "main";
@@ -232,8 +232,8 @@ public class EnergyGameTests {
     }
 
     private static List<ItemStack> lampTypes() {
-        ItemStack mounted = new ItemStack(FlashlightMod.HEADBAND.get());
-        LampData.mount(mounted, lamp(0));
+        ItemStack mounted = new ItemStack(FlashlightMod.HEADLAMP.get());
+        com.ltdigor.flashlightfe.TestLamps.copyState(mounted, lamp(0));
         return List.of(lamp(0), mounted);
     }
 

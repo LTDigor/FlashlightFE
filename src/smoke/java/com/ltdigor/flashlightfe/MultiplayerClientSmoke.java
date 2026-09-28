@@ -22,7 +22,7 @@ public final class MultiplayerClientSmoke {
     private static boolean opened, synchronizedBand;
     private static final Set<UUID> PRESS_OWNERS = new HashSet<>();
     private static final Set<UUID> MOVING_OWNERS = new HashSet<>();
-    private static boolean localPress, remotePress, logged;
+    private static boolean localPress, remotePress, logged, backendChecked;
     @SubscribeEvent public static void press(FlashlightNetwork.PressEvent event) {
         var mc = Minecraft.getInstance();
         if (!Boolean.getBoolean("bestflashlight.multiplayer.client") || mc.player == null) return;
@@ -40,10 +40,24 @@ public final class MultiplayerClientSmoke {
             ConnectScreen.startConnecting(mc.screen,mc,ServerAddress.parseString("127.0.0.1:25586"),
                 new ServerData("Flashlight test","127.0.0.1:25586",ServerData.Type.OTHER),false,null);
         }
-        if(mc.player!=null && !synchronizedBand && !LampSource.headband(mc.player).isEmpty()) {
-            if(LampEnergy.stored(LampSource.headband(mc.player))==0) throw new AssertionError("Remote Curios battery not synchronized");
+        if(mc.player!=null && !synchronizedBand && !LampSource.headlamp(mc.player).isEmpty()) {
+            if(LampEnergy.stored(LampSource.headlamp(mc.player))==0) throw new AssertionError("Remote Curios battery not synchronized");
             synchronizedBand=true;
             LogUtils.getLogger().info("FLASHLIGHT_REMOTE_CLIENT_PASS: {} Curios battery synchronized",mc.player.getName().getString());
+        }
+        if (Boolean.getBoolean("bestflashlight.multiplayer.mixed") && mc.player != null && logged && !backendChecked) {
+            try {
+                Class<?> bridge = Class.forName("com.ltdigor.flashlightfe.client.OptionalDynamicLights");
+                var available = bridge.getDeclaredField("available"); available.setAccessible(true);
+                var fallback = bridge.getDeclaredField("serverFallbackEnabled"); fallback.setAccessible(true);
+                var cones = bridge.getDeclaredField("CONES"); cones.setAccessible(true);
+                if (available.getBoolean(null) != Boolean.getBoolean("bestflashlight.multiplayer.ldl"))
+                    throw new AssertionError("Wrong real LDL availability on mixed peer");
+                if (!fallback.getBoolean(null) || !((java.util.Map<?, ?>) cones.get(null)).isEmpty())
+                    throw new AssertionError("Mixed peers must use server fallback without duplicate LDL light");
+                backendChecked = true;
+                LogUtils.getLogger().info("FLASHLIGHT_MIXED_BACKEND_PASS: {}", mc.player.getName().getString());
+            } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
         }
         if (mc.player != null && !PRESS_OWNERS.isEmpty()) {
             PRESS_OWNERS.stream().filter(owner -> ButtonAnimation.offset(owner, InteractionHand.MAIN_HAND, true) < -.35)
@@ -58,6 +72,8 @@ public final class MultiplayerClientSmoke {
             if(!synchronizedBand) throw new AssertionError("Disconnected before remote Curios synchronization");
             if(!localPress || !remotePress || !MOVING_OWNERS.containsAll(PRESS_OWNERS) || PRESS_OWNERS.size() != 2)
                 throw new AssertionError("Client did not receive sender and tracking handheld press visual state");
+            if (Boolean.getBoolean("bestflashlight.multiplayer.mixed") && !backendChecked)
+                throw new AssertionError("Mixed backend check never completed");
             mc.stop();
         }
     }

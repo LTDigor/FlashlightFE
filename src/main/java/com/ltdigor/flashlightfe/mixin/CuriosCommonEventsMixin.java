@@ -2,7 +2,6 @@ package com.ltdigor.flashlightfe.mixin;
 
 import com.ltdigor.flashlightfe.FlashlightEquipmentSync;
 import com.ltdigor.flashlightfe.FlashlightNetwork;
-import com.ltdigor.flashlightfe.LampData;
 import com.ltdigor.flashlightfe.LampEnergy;
 import com.ltdigor.flashlightfe.LampSource;
 import java.lang.reflect.InvocationTargetException;
@@ -64,23 +63,18 @@ abstract class CuriosCommonEventsMixin {
         if (FlashlightEquipmentSync.isEnergyOnlyChange(current, previous)
             && event.getEntity() instanceof ServerPlayer player
             && slotIndex >= 0
-            && LampSource.headband(player, slotIndex) == current
-            && player.connection.hasChannel(FlashlightNetwork.HeadbandEnergy.TYPE)) {
+            && LampSource.headlamp(player, slotIndex) == current
+            && player.connection.hasChannel(FlashlightNetwork.HeadlampEnergy.TYPE)) {
             PacketDistributor.sendToPlayer(
                 player,
-                new FlashlightNetwork.HeadbandEnergy(
+                new FlashlightNetwork.HeadlampEnergy(
                     slotIndex,
                     LampEnergy.stored(current)
                 )
             );
 
-            ItemStack currentLamp = LampData.mounted(current);
-            if (!currentLamp.isEmpty()) {
-                // getPreviousStackInSlot returns Curios' mutable previous snapshot.
-                // Advancing only the mounted ENERGY state avoids a CurioChangeEvent,
-                // modifier rebuild, and tracking SPacketSyncStack for every FE drain tick.
-                LampData.mount(previous, currentLamp);
-            }
+            // Advance only the mutable previous snapshot; state changes still sync normally.
+            FlashlightEquipmentSync.advanceDirectEnergySnapshot(previous, current);
             return true;
         }
 

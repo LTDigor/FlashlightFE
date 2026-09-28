@@ -35,9 +35,9 @@ public final class FlashlightNetwork {
         });
         optional.playToClient(FallbackMode.TYPE, FallbackMode.CODEC, (payload, context) ->
             NeoForge.EVENT_BUS.post(new FallbackModeEvent(payload.enabled())));
-        optional.playToClient(HeadbandEnergy.TYPE, HeadbandEnergy.CODEC, (payload, context) -> {
-            ItemStack band = LampSource.headband(context.player(), payload.slotIndex());
-            if (!band.isEmpty()) LampEnergy.setSyncedStored(band, payload.energy());
+        optional.playToClient(HeadlampEnergy.TYPE, HeadlampEnergy.CODEC, (payload, context) -> {
+            ItemStack lamp = LampSource.headlamp(context.player(), payload.slotIndex());
+            if (!lamp.isEmpty()) LampEnergy.setSyncedStored(lamp, payload.energy());
         });
         optional.playToClient(HandheldEnergy.TYPE, HandheldEnergy.CODEC, (payload, context) -> {
             int slot = payload.inventorySlot();
@@ -76,15 +76,15 @@ public final class FlashlightNetwork {
         @Override public Type<FallbackMode> type() { return TYPE; }
     }
 
-    public record HeadbandEnergy(int slotIndex, int energy) implements CustomPacketPayload {
-        public static final Type<HeadbandEnergy> TYPE = new Type<>(FlashlightMod.resource("headband_energy"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, HeadbandEnergy> CODEC = StreamCodec.of(
+    public record HeadlampEnergy(int slotIndex, int energy) implements CustomPacketPayload {
+        public static final Type<HeadlampEnergy> TYPE = new Type<>(FlashlightMod.resource("headlamp_energy"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, HeadlampEnergy> CODEC = StreamCodec.of(
             (buffer, value) -> {
                 buffer.writeVarInt(value.slotIndex());
                 buffer.writeVarInt(value.energy());
             },
-            buffer -> new HeadbandEnergy(buffer.readVarInt(), buffer.readVarInt()));
-        @Override public Type<HeadbandEnergy> type() { return TYPE; }
+            buffer -> new HeadlampEnergy(buffer.readVarInt(), buffer.readVarInt()));
+        @Override public Type<HeadlampEnergy> type() { return TYPE; }
     }
 
     public record HandheldEnergy(int inventorySlot, int energy) implements CustomPacketPayload {

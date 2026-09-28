@@ -1,32 +1,21 @@
 package com.ltdigor.flashlightfe;
 
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
 import java.util.function.Predicate;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
 /** Shared source selection for input, beam origin and energy consumption. */
 public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) {
-    private static final Set<UUID> LEGACY_CHECKED = new HashSet<>();
-
-    /** Recover legacy handheld Curios through Curios' own inventory/drop path once per login. */
-    public static void returnInvalidFlashlights(LivingEntity entity) {
-        if (entity.level().isClientSide() || !LEGACY_CHECKED.add(entity.getUUID())) return;
-        CuriosCompatibility.returnInvalidFlashlights(entity);
-    }
-
-    public static ItemStack headband(LivingEntity entity) {
-        var headbands = CuriosCompatibility.headbands(entity);
-        for (ItemStack stack : headbands) {
+    public static ItemStack headlamp(LivingEntity entity) {
+        var headlamps = CuriosCompatibility.headlamps(entity);
+        for (ItemStack stack : headlamps) {
             if (LampData.enabled(stack)) return stack;
         }
-        return headbands.stream().findFirst().orElse(ItemStack.EMPTY);
+        return headlamps.stream().findFirst().orElse(ItemStack.EMPTY);
     }
 
-    public static ItemStack headband(LivingEntity entity, int slotIndex) {
-        return CuriosCompatibility.headband(entity, slotIndex);
+    public static ItemStack headlamp(LivingEntity entity, int slotIndex) {
+        return CuriosCompatibility.headlamp(entity, slotIndex);
     }
 
     public static LampSource select(LivingEntity entity) {
@@ -50,26 +39,18 @@ public record LampSource(ItemStack stack, boolean headMounted, boolean offHand) 
             LampSource source = new LampSource(off, false, true);
             if (usable.test(source)) return source;
         }
-        for (ItemStack band : CuriosCompatibility.headbands(entity)) {
-            if (!LampData.enabled(band)) continue;
-            LampSource source = new LampSource(band, true, false);
+        for (ItemStack lamp : CuriosCompatibility.headlamps(entity)) {
+            if (!LampData.enabled(lamp)) continue;
+            LampSource source = new LampSource(lamp, true, false);
             if (usable.test(source)) return source;
         }
         return null;
     }
 
-    static void resetLegacyCheck(UUID player) {
-        LEGACY_CHECKED.remove(player);
-    }
-
-    static void clearLegacyChecks() {
-        LEGACY_CHECKED.clear();
-    }
-
     public static String toggleTarget(LivingEntity entity) {
         if (FlashlightMod.isFlashlight(entity.getMainHandItem())) return "main";
         if (FlashlightMod.isFlashlight(entity.getOffhandItem())) return "off";
-        if (!headband(entity).isEmpty()) return "headband";
+        if (!headlamp(entity).isEmpty()) return "headlamp";
         return null;
     }
 }

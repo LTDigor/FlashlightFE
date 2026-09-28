@@ -63,7 +63,7 @@ public final class BeamClientSmoke {
     private static final String[] STAGES = {
         "down-center", "down-edge", "down-corner", "wall", "sloped-floor",
         "flight", "fast-flight-chunk-crossing", "vertical-flight", "near-vertical-turn",
-        "offhand", "headband", "third-person", "obstacle", "obstacle-removed",
+        "offhand", "headlamp", "third-person", "obstacle", "obstacle-removed",
         "long-narrow", "maximum-cone", "two-sources-client-fixture", "four-sources-client-fixture",
         "torch-down", "torch-floor"
     };
@@ -201,8 +201,8 @@ public final class BeamClientSmoke {
             player.setItemSlot(EquipmentSlot.MAINHAND, stage == 9 || stage == 10 ? ItemStack.EMPTY : torchReference() ? new ItemStack(Items.TORCH) : lamp());
             player.setItemSlot(EquipmentSlot.OFFHAND, stage == 9 ? lamp() : ItemStack.EMPTY);
             var inventory = CuriosApi.getCuriosInventory(player).orElseThrow().getCurios().get("head").getStacks();
-            var band = stage == 10 ? new ItemStack(FlashlightMod.HEADBAND.get()) : ItemStack.EMPTY;
-            if (!band.isEmpty()) { LampData.mount(band, lamp()); LampData.setEnabled(band, true); }
+            var band = stage == 10 ? new ItemStack(FlashlightMod.HEADLAMP.get()) : ItemStack.EMPTY;
+            if (!band.isEmpty()) { com.ltdigor.flashlightfe.TestLamps.copyState(band, lamp()); LampData.setEnabled(band, true); }
             inventory.setStackInSlot(0, band);
             // At pitch 45 from eye (0.5,-56.38,0.5), z=2 intersects y≈-58.
             for (int y = -59; y <= -58; y++) player.serverLevel().setBlock(new BlockPos(0, y, 2),

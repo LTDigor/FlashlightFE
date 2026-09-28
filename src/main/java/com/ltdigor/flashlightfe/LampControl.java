@@ -11,12 +11,12 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 /** Input intentions are resolved again against the server's actual equipment. */
 public final class LampControl {
-    public enum Action { HAND_USE, HAND_KEY, HEADBAND }
+    public enum Action { HAND_USE, HAND_KEY, HEADLAMP }
 
     private LampControl() {}
 
     public static String target(LivingEntity player, Action action) {
-        if (action == Action.HEADBAND) return LampSource.headband(player).isEmpty() ? null : "headband";
+        if (action == Action.HEADLAMP) return LampSource.headlamp(player).isEmpty() ? null : "headlamp";
         if (FlashlightMod.isFlashlight(player.getMainHandItem())) return "main";
         if (action == Action.HAND_USE && !player.getMainHandItem().isEmpty()) return null;
         return FlashlightMod.isFlashlight(player.getOffhandItem()) ? "off" : null;
@@ -29,11 +29,11 @@ public final class LampControl {
         ItemStack stack = switch (target) {
             case "main" -> player.getMainHandItem();
             case "off" -> player.getOffhandItem();
-            default -> LampSource.headband(player);
+            default -> LampSource.headlamp(player);
         };
         boolean before = LampData.enabled(stack);
         boolean enabled = LampEnergy.toggle(stack, player);
-        if (!target.equals("headband")) {
+        if (!target.equals("headlamp")) {
             InteractionHand hand = target.equals("main") ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
             PacketDistributor.sendToPlayersTrackingEntityAndSelf(player,
                 new FlashlightNetwork.Press(player.getUUID(), hand, before, enabled));

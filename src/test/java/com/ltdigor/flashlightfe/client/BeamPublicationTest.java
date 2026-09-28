@@ -57,9 +57,9 @@ class BeamPublicationTest {
         var constructor = type.getDeclaredConstructor(OptionalDynamicLights.ConeState.class, Object.class);
         constructor.setAccessible(true);
         Object cone = constructor.newInstance(state, new Object());
-        var frame = type.getDeclaredMethod("frameUpdate", Vec3.class, Vec3.class, double.class, double.class, double.class);
+        var frame = type.getDeclaredMethod("frameUpdate", Vec3.class, double.class);
         frame.setAccessible(true);
-        frame.invoke(cone, new Vec3(16.5, 1.5, 0.5), new Vec3(1, 0, 0), 32, Math.toRadians(45), 1.0 / 60);
+        frame.invoke(cone, new Vec3(1, 0, 0), 1.0 / 60);
         assertTrue(state.lightAt(new BlockPos(0, 1, 2)) > 0);
         assertEquals(0, state.lightAt(new BlockPos(16, 1, 2)));
         assertFalse(state.hasChanged(), "Aiming updates must not publish untraced light");

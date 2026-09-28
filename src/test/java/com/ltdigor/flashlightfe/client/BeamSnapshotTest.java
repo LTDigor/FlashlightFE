@@ -64,4 +64,25 @@ class BeamSnapshotTest {
             }
         }
     }
+
+    @Test void configurationChangeInvalidatesCachedSnapshot() {
+        Vec3 origin = new Vec3(.5, 1.5, .5);
+        Vec3 axis = new Vec3(0, 0, 1);
+        BeamSnapshot snapshot = BeamSnapshot.build(origin, axis, 12, Math.toRadians(17.5), 15, .35,
+            pos -> true);
+        assertTrue(snapshot.matches(origin, axis, 12, Math.toRadians(17.5), 15, .35));
+        assertFalse(snapshot.matches(origin, axis, 12, Math.toRadians(17.5), 5, .35));
+        assertFalse(snapshot.matches(origin, axis, 12, Math.toRadians(17.5), 15, .8));
+    }
+
+    @Test void closeWallSnapshotKeepsOnlyVisibleNearAirCell() {
+        Vec3 origin = new Vec3(.5, -58.5, 7.65);
+        BeamSnapshot snapshot = BeamSnapshot.build(origin, new Vec3(0, 0, 1), 12,
+            Math.toRadians(17.5), 15, .35, pos -> pos.getZ() < 8);
+        assertTrue(snapshot.lightAt(new BlockPos(0, -59, 7)) > 0);
+        assertEquals(0, snapshot.lightAt(new BlockPos(0, -59, 6)));
+        assertEquals(0, snapshot.lightAt(new BlockPos(2, -59, 7)));
+        assertEquals(0, snapshot.lightAt(new BlockPos(0, -59, 8)),
+            "Wall cell and anything hidden by visibility must remain dark");
+    }
 }

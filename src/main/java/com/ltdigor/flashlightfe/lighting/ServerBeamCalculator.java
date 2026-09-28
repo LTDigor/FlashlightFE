@@ -34,12 +34,31 @@ public final class ServerBeamCalculator {
 
     private ServerBeamCalculator() {}
 
-    public static int handheldBrightness(double forward, double range) {
-        return Math.clamp(15 - (int) Math.floor(9.0 * forward / range), 1, 15);
+    public static int handheldBrightness(double forward, double range, int peak,
+                                         double softness, double radialFraction) {
+        if (range <= 0 || forward < 0 || forward > range) return 0;
+        double axial = 1.0 - 0.6 * forward / range;
+        return sourceBrightness(Math.clamp(peak, 1, 15) * axial, softness, radialFraction);
     }
 
-    public static int headBrightness(double forward) {
-        return Math.clamp(HEAD_MOUNTED_BACKSPILL_LEVEL + (int) Math.ceil(forward), 1, 15);
+    public static int headBrightness(double forward, double range, int peak,
+                                     double softness, double radialFraction) {
+        if (range <= 0 || forward < 0 || forward > range) return 0;
+        double limit = Math.min(Math.clamp(peak, 1, 15), HEAD_MOUNTED_BACKSPILL_LEVEL + Math.ceil(forward));
+        return sourceBrightness(limit, softness, radialFraction);
+    }
+
+    public static int closeWallBrightness(boolean headMounted, int peak) {
+        return headMounted ? Math.min(4, Math.clamp(peak, 1, 15)) : Math.clamp(peak, 1, 15);
+    }
+
+    private static int sourceBrightness(double axial, double softness, double radialFraction) {
+        if (radialFraction >= 1.0) return 0;
+        double width = Math.clamp(softness, 0.0, 1.0);
+        double radial = width <= 0 ? 1.0 : Math.clamp((1.0 - radialFraction) / width, 0.0, 1.0);
+        double profile = radial * radial * (3.0 - 2.0 * radial);
+        if (width > 0) profile *= Math.pow(1.0 - radialFraction * radialFraction, 2.0 * width);
+        return Math.clamp((int) Math.round(axial * profile), 0, 15);
     }
 
     public static double configuredRange() {
@@ -106,6 +125,8 @@ public final class ServerBeamCalculator {
         Vec3 vertical = horizontal.cross(axis).normalize();
         double range = configuredRange();
         double radius = range * Math.tan(Math.toRadians(configuredFullAngleDegrees() * 0.5));
+        int brightness = Math.clamp(FlashlightConfig.BEAM_BRIGHTNESS.get(), 1, 15);
+        double softness = Math.clamp(FlashlightConfig.BEAM_SOFTNESS.get(), 0.0, 1.0);
         Vec3 endCenter = origin.add(axis.scale(range));
         CollisionContext context = CollisionContext.of(player);
         Map<BlockPos, BlockState> states = new HashMap<>();
@@ -114,16 +135,20 @@ public final class ServerBeamCalculator {
                 if (u * u + v * v > DIRECTION_RADIUS * DIRECTION_RADIUS) continue;
                 Vec3 end = endCenter.add(horizontal.scale(radius * u / DIRECTION_RADIUS))
                     .add(vertical.scale(radius * v / DIRECTION_RADIUS));
+                double radialFraction = Math.sqrt(u * u + v * v) / DIRECTION_RADIUS;
                 if (headMounted) {
-                    traceTerminalRay(level, origin, end, axis, range, context, states, cells);
+                    traceTerminalRay(level, origin, end, axis, range, brightness, softness,
+                        radialFraction, context, states, cells);
                 } else {
-                    traceRay(level, origin, end, axis, range, context, states, cells);
+                    traceRay(level, origin, end, axis, range, brightness, softness,
+                        radialFraction, context, states, cells);
                 }
             }
         }
     }
 
     private static void traceRay(ServerLevel level, Vec3 origin, Vec3 end, Vec3 axis, double range,
+                                 int brightness, double softness, double radialFraction,
                                  CollisionContext context, Map<BlockPos, BlockState> states,
                                  Map<BlockPos, Integer> result) {
         Vec3 delta = end.subtract(origin);
@@ -144,7 +169,8 @@ public final class ServerBeamCalculator {
             if (state.getCollisionShape(level, pos, context).clip(origin, end, pos) != null) return;
             double forward = pos.getCenter().subtract(origin).dot(axis);
             if (forward >= HANDHELD_MIN_FORWARD && forward <= range && canHostTransientLight(state)) {
-                result.merge(pos, handheldBrightness(forward, range), Math::max);
+                int light = handheldBrightness(forward, range, brightness, softness, radialFraction);
+                if (light > 0) result.merge(pos, light, Math::max);
             }
 
             double next = Math.min(crossX, Math.min(crossY, crossZ));
@@ -159,6 +185,7 @@ public final class ServerBeamCalculator {
     }
 
     private static void traceTerminalRay(ServerLevel level, Vec3 origin, Vec3 end, Vec3 axis, double range,
+                                         int brightness, double softness, double radialFraction,
                                          CollisionContext context, Map<BlockPos, BlockState> states,
                                          Map<BlockPos, Integer> result) {
         Vec3 delta = end.subtract(origin);
@@ -196,7 +223,8 @@ public final class ServerBeamCalculator {
         }
 
         if (terminal != null) {
-            result.merge(terminal, headBrightness(terminalForward), Math::max);
+            int light = headBrightness(terminalForward, range, brightness, softness, radialFraction);
+            if (light > 0) result.merge(terminal, light, Math::max);
         }
     }
 

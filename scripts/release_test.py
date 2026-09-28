@@ -58,7 +58,7 @@ class ReleaseTests(unittest.TestCase):
     def test_jar_validation_rejects_wrong_version_and_smoke_files(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'flashlight-fe-1.2.3.jar'
-            for extra, metadata in [(None, METADATA), ('com/ltdigor/bestflashlight/BeamGameTests.class', METADATA), ('data/bestflashlight/structure/empty.nbt', METADATA), (None, METADATA.replace('1.2.3', '${mod_version}'))]:
+            for extra, metadata in [(None, METADATA), ('com/ltdigor/bestflashlight/BeamGameTests.class', METADATA), ('data/bestflashlight/structure/empty.nbt', METADATA), ('data/curios/curios/slots/head.json', METADATA), ('data/bestflashlight/curios/entities/headlamp.json', METADATA), ('compatibility-fixture.txt', METADATA), (None, METADATA.replace('1.2.3', '${mod_version}'))]:
                 with zipfile.ZipFile(path, 'w') as jar:
                     jar.writestr('META-INF/neoforge.mods.toml', metadata)
                     jar.writestr('com/ltdigor/bestflashlight/BestFlashlight.class', b'bytecode')

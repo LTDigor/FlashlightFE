@@ -10,6 +10,8 @@ public final class FlashlightConfig {
     public static final ModConfigSpec.BooleanValue WORKS_UNDERWATER;
     public static final ModConfigSpec.DoubleValue BEAM_RANGE;
     public static final ModConfigSpec.DoubleValue CONE_ANGLE_DEGREES;
+    public static final ModConfigSpec.IntValue BEAM_BRIGHTNESS;
+    public static final ModConfigSpec.DoubleValue BEAM_SOFTNESS;
     static {
         var b = new ModConfigSpec.Builder();
         b.comment("Настройки фонарика. Изменения применяются после перезапуска мира/сервера.");
@@ -26,6 +28,10 @@ public final class FlashlightConfig {
             .worldRestart().defineInRange("beamRange", 12.0, 1.0, 32.0);
         CONE_ANGLE_DEGREES = b.comment("Полный угол конуса в градусах (не половина). Меньше угол — уже луч.")
             .worldRestart().defineInRange("coneAngleDegrees", 35.0, 1.0, 90.0);
+        BEAM_BRIGHTNESS = b.comment("Максимальная яркость луча (уровень света 1–15).")
+            .worldRestart().defineInRange("beamBrightness", 15, 1, 15);
+        BEAM_SOFTNESS = b.comment("Мягкость края луча: 0 — чёткий круг, 1 — плавное затухание от центра.")
+            .worldRestart().defineInRange("beamSoftness", 0.35, 0.0, 1.0);
         SPEC = b.build();
     }
     private FlashlightConfig() {}

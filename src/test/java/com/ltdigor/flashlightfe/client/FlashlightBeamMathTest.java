@@ -29,24 +29,72 @@ class FlashlightBeamMathTest {
         }
     }
 
-    @Test void radialEdgeFadesAtTorchRateInsteadOfJumpingBetweenBlocks() {
+    @Test void radialEdgeFadesInsideTheConfiguredCone() {
         Vec3 axis = new Vec3(0, 0, 1);
-        double previous = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, new Vec3(0.5, 0, 4), 12, Math.toRadians(7.5));
-        for (double radial = 1.5; radial <= 10.5; radial++) {
-            double next = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, new Vec3(radial, 0, 4), 12, Math.toRadians(7.5));
-            assertTrue(previous >= next);
-            assertTrue(previous - next <= 15.0 / 7.75 + EPS,
-                "Adjacent light samples must not jump across a sub-block penumbra");
-            previous = next;
+        double angle = Math.toRadians(17.5);
+        double center = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, new Vec3(0, 0, 8), 12, angle, 15, .35);
+        double shoulder = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, new Vec3(1.9, 0, 8), 12, angle, 15, .35);
+        double outside = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, new Vec3(2.6, 0, 8), 12, angle, 15, .35);
+        assertTrue(center > shoulder && shoulder > 0);
+        assertEquals(0, outside, EPS, "The beam must not carry a fixed radial halo");
+    }
+
+    @Test void widerConeWidensTheLitCircleAtTheSameDistance() {
+        Vec3 point = new Vec3(2, 0, 8);
+        assertEquals(0, FlashlightBeamMath.coneLuminance(Vec3.ZERO, new Vec3(0, 0, 1),
+            point, 12, Math.toRadians(7.5), 15, .35), EPS);
+        assertTrue(FlashlightBeamMath.coneLuminance(Vec3.ZERO, new Vec3(0, 0, 1),
+            point, 12, Math.toRadians(17.5), 15, .35) > 0);
+    }
+
+    @Test void softnessMovesTheShoulderWithoutMovingTheOuterEdge() {
+        Vec3 axis = new Vec3(0, 0, 1);
+        Vec3 shoulder = new Vec3(1.8, 0, 8);
+        double hard = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, shoulder, 12,
+            Math.toRadians(17.5), 15, 0);
+        double soft = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, shoulder, 12,
+            Math.toRadians(17.5), 15, 1);
+        assertTrue(hard > soft && soft > 0);
+        for (double softness : new double[]{0, .35, 1}) {
+            assertEquals(0, FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, new Vec3(2.6, 0, 8),
+                12, Math.toRadians(17.5), 15, softness), EPS);
         }
-        assertEquals(0, previous);
+    }
+
+    @Test void defaultSoftnessGradesLightInsideTheCore() {
+        Vec3 axis = new Vec3(0, 0, 1);
+        double angle = Math.toRadians(17.5);
+        double center = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis,
+            new Vec3(0, 0, 8), 12, angle, 15, .35);
+        double inner = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis,
+            new Vec3(1, 0, 8), 12, angle, 15, .35);
+        assertTrue(center - inner > 1, "Core samples must not form a flat square plateau");
+        double hardCenter = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis,
+            new Vec3(0, 0, 8), 12, angle, 15, 0);
+        double hardInner = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis,
+            new Vec3(1, 0, 8), 12, angle, 15, 0);
+        assertEquals(hardCenter, hardInner, EPS, "Softness zero keeps a hard circular interior");
+    }
+
+    @Test void peakBrightnessScalesTheBeamAndClampsInvalidValues() {
+        Vec3 axis = new Vec3(0, 0, 1);
+        Vec3 point = new Vec3(0, 0, 2);
+        double bright = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, point, 12,
+            Math.toRadians(17.5), 15, .35);
+        double dim = FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, point, 12,
+            Math.toRadians(17.5), 5, .35);
+        assertTrue(bright > dim && dim > 0);
+        assertEquals(FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, point, 12,
+            Math.toRadians(17.5), 5, 0), FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis,
+            point, 12, Math.toRadians(17.5), 5, -.5), EPS);
+        assertEquals(bright, FlashlightBeamMath.coneLuminance(Vec3.ZERO, axis, point, 12,
+            Math.toRadians(17.5), 100, .35), EPS);
     }
 
     @Test void endOfRangeFadesBeforeTheCutoff() {
         double atTen = FlashlightBeamMath.coneLuminance(Vec3.ZERO, new Vec3(0, 0, 1), new Vec3(0, 0, 10), 12, Math.toRadians(7.5));
         double atEleven = FlashlightBeamMath.coneLuminance(Vec3.ZERO, new Vec3(0, 0, 1), new Vec3(0, 0, 11), 12, Math.toRadians(7.5));
         assertTrue(atTen > atEleven && atEleven > 0);
-        assertTrue(atEleven <= 15.0 / 7.75 + EPS);
     }
 
     @Test void farConeStaysCircularAndDoesNotLightBehindOrigin() {
@@ -58,7 +106,7 @@ class FlashlightBeamMathTest {
         double diagonal = FlashlightBeamMath.coneLuminance(origin, axis,
             new Vec3(1.2 / Math.sqrt(2), 1.2 / Math.sqrt(2), 10), 12, angle);
         assertEquals(cardinal, diagonal, EPS);
-        assertEquals(0, FlashlightBeamMath.coneLuminance(origin, axis, new Vec3(0, 0, -0.01), 12, angle));
+        assertEquals(0, FlashlightBeamMath.coneLuminance(origin, axis, new Vec3(0, 0, -1), 12, angle));
         assertEquals(0, FlashlightBeamMath.coneLuminance(origin, axis, new Vec3(0, 0, 12.01), 12, angle));
     }
 
@@ -130,7 +178,22 @@ class FlashlightBeamMathTest {
         assertTrue(light > 10.0);
     }
 
+    @Test void closeWallAirCellJustBehindEmitterReceivesBoundedNearFieldLight() {
+        Vec3 origin = new Vec3(0.5, -58.5, 7.65);
+        Vec3 axis = new Vec3(0, 0, 1);
+        double angle = Math.toRadians(17.5);
+        assertTrue(FlashlightBeamMath.coneLuminance(origin, axis,
+            new Vec3(.5, -58.5, 7.5), 12, angle, 15, .35) > 0,
+            "Nearest air block must light when the next forward cell is a wall");
+        assertEquals(0, FlashlightBeamMath.coneLuminance(origin, axis,
+            new Vec3(.5, -58.5, 6.5), 12, angle, 15, .35), EPS);
+        assertEquals(0, FlashlightBeamMath.coneLuminance(origin, axis,
+            new Vec3(2.5, -58.5, 7.5), 12, angle, 15, .35), EPS);
+    }
+
     @Test void configuredFullAngleConvertsToHalfAngle() {
         assertEquals(Math.toRadians(7.5), FlashlightBeamMath.halfAngleRadians(15.0), EPS);
+        assertEquals(Math.toRadians(.5), FlashlightBeamMath.halfAngleRadians(-10.0), EPS);
+        assertEquals(Math.toRadians(45), FlashlightBeamMath.halfAngleRadians(120.0), EPS);
     }
 }

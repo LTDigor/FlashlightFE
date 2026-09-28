@@ -1,0 +1,4 @@
+{
+  "parent": "bestflashlight:item/headlamp_off",
+  "overrides": [{"predicate":{"bestflashlight:enabled":1},"model":"bestflashlight:item/headlamp_on"}]
+}

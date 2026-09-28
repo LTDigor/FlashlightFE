@@ -34,8 +34,6 @@ public final class ServerBeamLightingManager {
     private static final int STATIC_BEAM_REFRESH_TICKS = 4;
     private static final double CACHE_POSITION_EPSILON_SQR = 0.01 * 0.01;
     private static final double CACHE_DIRECTION_DOT = Math.cos(Math.toRadians(0.20));
-    private static final int HEAD_MOUNTED_CLOSE_WALL_LEVEL = 4;
-    private static final int HANDHELD_CLOSE_WALL_LEVEL = 15;
 
     private final Map<UUID, PlayerBeamState> players = new HashMap<>();
     private final Map<ResourceKey<Level>, AppliedDimensionState> applied = new HashMap<>();
@@ -45,7 +43,8 @@ public final class ServerBeamLightingManager {
     /** Geometry cache plus the frame it produced; owns no world positions per player. */
     public record PlayerBeamState(BeamFrame frame, Vec3 eye, Vec3 emitter, Vec3 look,
                                   ResourceKey<Level> dimension, boolean headMounted, boolean offHand,
-                                  double range, double angle, long computedAtTick) {}
+                                  double range, double angle, int brightness, double softness,
+                                  long computedAtTick) {}
 
     private record OrphanCandidate(ResourceKey<Level> dimension, BlockPos pos) {}
 
@@ -68,7 +67,6 @@ public final class ServerBeamLightingManager {
     /** Source validation, geometry (cached when static), FE drain and dirty marking. */
     public void updatePlayer(ServerPlayer player) {
         UUID owner = player.getUUID();
-        LampSource.returnInvalidFlashlights(player);
         if (!player.isAlive() || player.isSpectator()) {
             removePlayer(player);
             return;
@@ -108,6 +106,8 @@ public final class ServerBeamLightingManager {
         Vec3 origin = ServerBeamCalculator.emitterPathClear(player, level, eye, emitter) ? emitter : eye;
         double range = ServerBeamCalculator.configuredRange();
         double angle = ServerBeamCalculator.configuredFullAngleDegrees();
+        int brightness = Math.clamp(FlashlightConfig.BEAM_BRIGHTNESS.get(), 1, 15);
+        double softness = Math.clamp(FlashlightConfig.BEAM_SOFTNESS.get(), 0.0, 1.0);
         PlayerBeamState previous = players.get(owner);
         boolean reuse = previous != null
             && previous.dimension().equals(level.dimension())
@@ -118,14 +118,19 @@ public final class ServerBeamLightingManager {
             && previous.look().dot(look) >= CACHE_DIRECTION_DOT
             && Double.compare(previous.range(), range) == 0
             && Double.compare(previous.angle(), angle) == 0
+            && previous.brightness() == brightness
+            && Double.compare(previous.softness(), softness) == 0
             && gameTick - previous.computedAtTick() < STATIC_BEAM_REFRESH_TICKS;
 
         PlayerBeamState state = previous;
         if (!reuse) {
             BeamFrame frame = computeFrame(player, level, origin, look, source.headMounted());
             state = new PlayerBeamState(frame, eye, emitter, look, level.dimension(),
-                source.headMounted(), source.offHand(), range, angle, gameTick);
+                source.headMounted(), source.offHand(), range, angle, brightness, softness, gameTick);
             players.put(owner, state);
+            if (previous != null && !previous.dimension().equals(level.dimension())) {
+                dirtyDimensions.add(previous.dimension());
+            }
             if (previous == null || !previous.frame().equals(frame) || !previous.dimension().equals(level.dimension())) {
                 dirtyDimensions.add(level.dimension());
             }
@@ -147,14 +152,14 @@ public final class ServerBeamLightingManager {
         if (!frame.isEmpty()) return frame;
         Vec3 eye = player.getEyePosition();
         return ServerBeamCalculator.closeWall(player, level, eye, look,
-            headMounted ? HEAD_MOUNTED_CLOSE_WALL_LEVEL : HANDHELD_CLOSE_WALL_LEVEL);
+            ServerBeamCalculator.closeWallBrightness(headMounted, FlashlightConfig.BEAM_BRIGHTNESS.get()));
     }
 
     private static Vec3 emitterOrigin(ServerPlayer player, LampSource source, Vec3 look) {
         Vec3 eye = player.getEyePosition();
         double yaw = Math.toRadians(player.getYRot());
         boolean rightSide = (player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT) != source.offHand();
-        EmitterTransform transform = source.headMounted() ? EmitterTransform.HEADBAND : EmitterTransform.HANDHELD;
+        EmitterTransform transform = source.headMounted() ? EmitterTransform.HEADLAMP : EmitterTransform.HANDHELD;
         return transform.origin(eye, look, yaw, rightSide, source.headMounted());
     }
 

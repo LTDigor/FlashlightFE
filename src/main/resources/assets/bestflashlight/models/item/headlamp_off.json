@@ -1,5 +1,5 @@
 {
-  "parent": "bestflashlight:item/headband_empty",
+  "parent": "minecraft:block/block",
   "ambientocclusion": false,
   "gui_light": "side",
   "render_type": "minecraft:cutout",
@@ -45,5 +45,6 @@
     {"name":"battery","from":[6.2,12.6,12.7],"to":[9.8,14.8,14.0],"faces":{"north":{"uv":[0,12,4,16],"texture":"#atlas"},"south":{"uv":[0,12,4,16],"texture":"#atlas"},"east":{"uv":[0,12,4,16],"texture":"#atlas"},"west":{"uv":[0,12,4,16],"texture":"#atlas"},"up":{"uv":[0,12,4,16],"texture":"#atlas"},"down":{"uv":[0,12,4,16],"texture":"#atlas"}}},
     {"name":"battery_latch","from":[7.55,12.4,14.0],"to":[8.45,13.0,14.15],"faces":{"south":{"uv":[8,0,12,4],"texture":"#atlas"},"east":{"uv":[8,0,12,4],"texture":"#atlas"},"west":{"uv":[8,0,12,4],"texture":"#atlas"},"up":{"uv":[8,0,12,4],"texture":"#atlas"},"down":{"uv":[8,0,12,4],"texture":"#atlas"}}},
     {"name":"battery_marker","from":[6.55,13.3,14.01],"to":[7.15,14.25,14.01],"faces":{"south":{"uv":[0,4,4,8],"texture":"#atlas"}}}
-  ]
+  ],
+  "display": {"gui":{"rotation":[24,145,0],"translation":[0,-5.5,0],"scale":[1.12,1.12,1.12]},"ground":{"rotation":[0,0,0],"translation":[0,-1.5,0],"scale":[0.55,0.55,0.55]},"fixed":{"rotation":[0,180,0],"translation":[0,-5.5,0],"scale":[1,1,1]},"firstperson_righthand":{"rotation":[0,30,0],"translation":[0,-3.5,0],"scale":[0.6,0.6,0.6]},"firstperson_lefthand":{"rotation":[0,30,0],"translation":[0,-3.5,0],"scale":[0.6,0.6,0.6]},"thirdperson_righthand":{"rotation":[75,0,0],"translation":[0,1,-3],"scale":[0.6,0.6,0.6]},"thirdperson_lefthand":{"rotation":[75,0,0],"translation":[0,1,-3],"scale":[0.6,0.6,0.6]},"head":{"rotation":[0,0,0],"translation":[0,-6.4,0],"scale":[1.6,1.6,1.6]}}
 }

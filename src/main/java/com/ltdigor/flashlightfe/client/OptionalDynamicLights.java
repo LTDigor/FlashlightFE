@@ -135,8 +135,6 @@ final class OptionalDynamicLights {
         if (!available || client.level == null || client.player == null || activeLevel != client.level) return;
         if (serverFallbackEnabled && fallbackGraceTicks <= 0) return;
 
-        double range = Math.clamp(FlashlightConfig.BEAM_RANGE.get(), 1.0, 32.0);
-        double halfAngle = FlashlightBeamMath.halfAngleRadians(FlashlightConfig.CONE_ANGLE_DEGREES.get());
         float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
         double deltaSeconds = Math.max(0.0, event.getPartialTick().getRealtimeDeltaTicks()) / 20.0;
 
@@ -147,21 +145,15 @@ final class OptionalDynamicLights {
             Vec3 look = player.getViewVector(partialTick);
             if (look.lengthSqr() < 1.0E-12) continue;
             look = look.normalize();
-            Vec3 eye = player.getEyePosition(partialTick);
-            Vec3 start;
             Vec3 target = look;
 
             if (player == client.player && client.options.getCameraType().isFirstPerson()) {
                 var camera = event.getCamera();
                 var cameraLook = camera.getLookVector();
                 target = new Vec3(cameraLook.x(), cameraLook.y(), cameraLook.z());
-                start = camera.getPosition();
-            } else {
-                Vec3 emitter = emitterOrigin(player, cone.headMounted, cone.offHand, look, eye);
-                start = cone.useEmitter ? emitter : eye;
             }
 
-            cone.frameUpdate(start, target, range, halfAngle, deltaSeconds);
+            cone.frameUpdate(target, deltaSeconds);
         }
     }
 
@@ -200,6 +192,8 @@ final class OptionalDynamicLights {
     private static void updateTrackedPlayers(Minecraft client) {
         double range = Math.clamp(FlashlightConfig.BEAM_RANGE.get(), 1.0, 32.0);
         double halfAngle = FlashlightBeamMath.halfAngleRadians(FlashlightConfig.CONE_ANGLE_DEGREES.get());
+        int brightness = Math.clamp(FlashlightConfig.BEAM_BRIGHTNESS.get(), 1, 15);
+        double softness = Math.clamp(FlashlightConfig.BEAM_SOFTNESS.get(), 0.0, 1.0);
         double maxDistance = client.options.getEffectiveRenderDistance() * 16.0 + range + 16.0;
         double maxDistanceSqr = maxDistance * maxDistance;
         Set<UUID> seen = new HashSet<>();
@@ -239,7 +233,7 @@ final class OptionalDynamicLights {
             boolean useEmitter = !localFirstPerson && emitterPathClear(client.level, player, eye, emitter);
             if (!localFirstPerson) start = useEmitter ? emitter : eye;
             cone.configureSource(source.headMounted(), source.offHand(), useEmitter);
-            cone.tickUpdate(client.level, player, start, target, range, halfAngle);
+            cone.tickUpdate(client.level, player, start, target, range, halfAngle, brightness, softness);
             if (!cone.added && !addCone(cone)) {
                 disable();
                 return;
@@ -473,15 +467,15 @@ final class OptionalDynamicLights {
         }
 
         private void tickUpdate(ClientLevel level, Player player, Vec3 start, Vec3 target,
-                                double range, double halfAngle) {
+                                double range, double halfAngle, int brightness, double softness) {
             if (smoothDirection == null || smoothDirection.lengthSqr() < 1.0E-12) {
                 smoothDirection = target.normalize();
             }
             Vec3 axis = smoothDirection.normalize();
-            if (lastBuilt == null || !lastBuilt.matches(start, axis, range, halfAngle)
+            if (lastBuilt == null || !lastBuilt.matches(start, axis, range, halfAngle, brightness, softness)
                 || ++ticksSinceBuild >= STATIC_OCCLUSION_REFRESH_TICKS) {
                 long began = System.nanoTime();
-                BeamSnapshot next = BeamSnapshot.build(start, axis, range, halfAngle,
+                BeamSnapshot next = BeamSnapshot.build(start, axis, range, halfAngle, brightness, softness,
                     new BeamVisibility(level, player, start, level::hasChunkAt));
                 lastBuildNanos = System.nanoTime() - began;
                 lastBuildSequence++;
@@ -494,7 +488,7 @@ final class OptionalDynamicLights {
             state.setActive(true);
         }
 
-        private void frameUpdate(Vec3 start, Vec3 target, double range, double halfAngle, double deltaSeconds) {
+        private void frameUpdate(Vec3 target, double deltaSeconds) {
             double smoothing = FlashlightBeamMath.frameIndependentFactor(
                 NOMINAL_SMOOTHING, deltaSeconds, NOMINAL_FPS);
             smoothDirection = FlashlightBeamMath.smooth(smoothDirection, target, smoothing);

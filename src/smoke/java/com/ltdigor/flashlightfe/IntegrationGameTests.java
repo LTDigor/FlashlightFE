@@ -34,7 +34,7 @@ public class IntegrationGameTests {
         ChargingStationBlockEntity station = helper.getBlockEntity(pos);
         for (boolean mounted : List.of(false, true)) {
             ItemStack item = lamp(0);
-            if (mounted) { ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get()); LampData.mount(band, item); item = band; }
+            if (mounted) { ItemStack band = new ItemStack(FlashlightMod.HEADLAMP.get()); com.ltdigor.flashlightfe.TestLamps.copyState(band, item); item = band; }
             helper.assertTrue(station.isStackValid(0, item), "IE station must accept the item");
             station.inventory.set(0, item);
             station.energyStorage.receiveEnergy(32_000, false);
@@ -206,15 +206,15 @@ public class IntegrationGameTests {
             var inventory = CuriosApi.getCuriosInventory(player).orElseThrow();
             var head = inventory.getCurios().get("head");
             helper.assertTrue(head != null && head.getStacks().getSlots() == 1, "Player must receive one Curios head slot");
-            ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get()); LampData.mount(band, lamp(50));
+            ItemStack band = new ItemStack(FlashlightMod.HEADLAMP.get()); com.ltdigor.flashlightfe.TestLamps.copyState(band, lamp(50));
             LampData.setEnabled(band, true); head.getStacks().setStackInSlot(0, band);
             player.setPos(helper.absolutePos(new BlockPos(8, 1, 3)).getCenter());
-            helper.assertTrue(LampSource.select(player).headMounted() && LampSource.toggleTarget(player).equals("headband"), "Free hands must select forehead lamp");
+            helper.assertTrue(LampSource.select(player).headMounted() && LampSource.toggleTarget(player).equals("headlamp"), "Free hands must select forehead lamp");
             FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             helper.assertTrue(LampEnergy.stored(head.getStacks().getStackInSlot(0)) == 49, "Curios battery drains once per emitting tick");
             player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(net.minecraft.world.item.Items.DIAMOND_HELMET));
-            helper.assertTrue(LampSource.select(player).stack().getItem() instanceof HeadbandItem, "Armor helmet must coexist with band");
+            helper.assertTrue(LampSource.select(player).stack().getItem() instanceof HeadlampItem, "Armor helmet must coexist with band");
         } finally { remove(helper, player); }
         helper.succeed();
     }
@@ -247,7 +247,7 @@ public class IntegrationGameTests {
     }
 
     @GameTest(template = "empty", batch = "config_underwater_fallback")
-    public static void submergedHandheldDoesNotStarveDryHeadband(GameTestHelper helper) {
+    public static void submergedHandheldDoesNotStarveDryHeadlamp(GameTestHelper helper) {
         useLegacyEnergyRate();
         boolean originalWorksUnderwater = FlashlightConfig.WORKS_UNDERWATER.get();
         ServerPlayer player = new net.neoforged.neoforge.common.util.FakePlayer(helper.getLevel(),
@@ -263,8 +263,8 @@ public class IntegrationGameTests {
             LampData.setEnabled(main, true);
             player.setItemSlot(EquipmentSlot.MAINHAND, main);
 
-            ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get());
-            LampData.mount(band, lamp(10));
+            ItemStack band = new ItemStack(FlashlightMod.HEADLAMP.get());
+            com.ltdigor.flashlightfe.TestLamps.copyState(band, lamp(10));
             LampData.setEnabled(band, true);
             var head = CuriosApi.getCuriosInventory(player).orElseThrow().getCurios().get("head").getStacks();
             head.setStackInSlot(0, band);
@@ -277,7 +277,7 @@ public class IntegrationGameTests {
             helper.assertTrue(LampEnergy.stored(main) == 10,
                 "A submerged handheld skipped by config must not consume FE");
             helper.assertTrue(LampEnergy.stored(head.getStackInSlot(0)) == 9,
-                "A dry enabled headband must emit instead of being starved by the submerged handheld");
+                "A dry enabled headlamp must emit instead of being starved by the submerged handheld");
         } finally {
             FlashlightConfig.WORKS_UNDERWATER.set(originalWorksUnderwater);
             FlashlightConfig.WORKS_UNDERWATER.clearCache();

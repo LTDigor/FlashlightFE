@@ -9,8 +9,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.RecipeSerializer;
-import net.minecraft.world.item.crafting.SimpleCraftingRecipeSerializer;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -31,21 +29,17 @@ public final class FlashlightMod {
     public static final String MOD_ID = "bestflashlight";
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(Registries.ITEM, MOD_ID);
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(Registries.BLOCK, MOD_ID);
-    public static final DeferredRegister<RecipeSerializer<?>> RECIPES = DeferredRegister.create(Registries.RECIPE_SERIALIZER, MOD_ID);
     public static final DeferredHolder<Item, Item> FLASHLIGHT = ITEMS.register("flashlight", () -> new FlashlightItem(new Item.Properties()));
-    public static final DeferredHolder<Item, Item> HEADBAND = ITEMS.register("headband", () -> new HeadbandItem(new Item.Properties()));
+    public static final DeferredHolder<Item, Item> HEADLAMP = ITEMS.register("headlamp", () -> new HeadlampItem(new Item.Properties()));
     public static final DeferredHolder<Block, Block> FLASHLIGHT_LIGHT = BLOCKS.register("flashlight_light", () ->
         new TransientLightBlock(BlockBehaviour.Properties.of().replaceable().noCollission().noOcclusion()
             .mapColor(state -> state.getValue(TransientLightBlock.WATERLOGGED) ? MapColor.WATER : MapColor.NONE)
             .noLootTable().pushReaction(PushReaction.BLOCK)
             .lightLevel(state -> state.getValue(TransientLightBlock.LEVEL))));
-    public static final DeferredHolder<RecipeSerializer<?>, RecipeSerializer<?>> HEADBAND_RECIPE = RECIPES.register(
-        "headband_mount", () -> new SimpleCraftingRecipeSerializer<>(HeadbandRecipe::new));
 
     public FlashlightMod(IEventBus bus, ModContainer container) {
         ITEMS.register(bus);
         BLOCKS.register(bus);
-        RECIPES.register(bus);
         LampData.COMPONENTS.register(bus);
         container.registerConfig(ModConfig.Type.SERVER, FlashlightConfig.SPEC);
         bus.addListener(LampEnergy::register);
@@ -71,7 +65,7 @@ public final class FlashlightMod {
     private static void creativeItems(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(FLASHLIGHT.get());
-            event.accept(HEADBAND.get());
+            event.accept(HEADLAMP.get());
         }
     }
 
@@ -82,7 +76,7 @@ public final class FlashlightMod {
     }
 
     private static int toggle(ServerPlayer player, String target) {
-        LampControl.Action action = target.equals("headband") ? LampControl.Action.HEADBAND : LampControl.Action.HAND_KEY;
+        LampControl.Action action = target.equals("headlamp") ? LampControl.Action.HEADLAMP : LampControl.Action.HAND_KEY;
         return target.equals(LampControl.target(player, action)) ? LampControl.press(player, action) : 0;
     }
 }

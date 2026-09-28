@@ -6,8 +6,19 @@ version = providers.gradleProperty('mod_version').get()
 group = 'com.ltdigor.flashlightfe'
 base { archivesName = 'flashlight-fe' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
-sourceSets { smoke { compileClasspath += sourceSets.main.output; runtimeClasspath += sourceSets.main.output } }
+def compatCurios = providers.gradleProperty('compatCurios').getOrElse('head')
+if (!(compatCurios in ['absent', 'empty', 'head'])) throw new GradleException('compatCurios must be absent, empty or head')
+def compatLdl = providers.gradleProperty('compatLdl').getOrElse('false').toBoolean()
+def compatRunDir = "run-compat-${compatCurios}-${compatLdl ? 'ldl' : 'vanilla'}"
+sourceSets {
+    smoke { compileClasspath += sourceSets.main.output; runtimeClasspath += sourceSets.main.output }
+    compatibility { compileClasspath += sourceSets.main.output; runtimeClasspath += sourceSets.main.output }
+}
+if (compatCurios == 'head') sourceSets.compatibility.resources.srcDir('src/curiosHead/resources')
+sourceSets.smoke.resources.srcDir('src/curiosHead/resources')
 configurations {
+    compatibilityImplementation.extendsFrom implementation
+    compatibilityRuntimeOnly.extendsFrom runtimeOnly
     smokeImplementation.extendsFrom implementation
     smokeRuntimeOnly.extendsFrom runtimeOnly
 }
@@ -21,7 +32,7 @@ dependencies {
     compileOnly 'mezz.jei:jei-1.21.1-common-api:19.54.0.429'
     compileOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
     // Dev runs only; the shipped mod keeps Curios optional via mods.toml.
-    runtimeOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
+    if (compatCurios != 'absent') runtimeOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
     smokeImplementation 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
     testRuntimeOnly 'top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1'
     smokeImplementation 'curse.maven:immersive-engineering-231951:6733669'
@@ -43,11 +54,21 @@ def addQuickPlay = { cfg, String runDir ->
 neoForge {
     version = '21.1.249'
     addModdingDependenciesTo sourceSets.smoke
+    addModdingDependenciesTo sourceSets.compatibility
     mods {
         bestflashlight { sourceSet sourceSets.main }
+        bestflashlightCompatibility { sourceSet sourceSets.main; sourceSet sourceSets.compatibility }
         bestflashlightSmoke { sourceSet sourceSets.main; sourceSet sourceSets.smoke }
     }
     runs {
+        compatibilityClient {
+            client(); sourceSet = sourceSets.compatibility; loadedMods = [mods.bestflashlightCompatibility]
+            gameDirectory = file(compatRunDir)
+            systemProperty 'bestflashlight.compatibility', 'true'
+            systemProperty 'bestflashlight.compatibility.curios', compatCurios
+            systemProperty 'bestflashlight.compatibility.ldl', compatLdl.toString()
+            programArgument '--username'; programArgument 'Compatibility'
+        }
         client { client(); loadedMods = [mods.bestflashlight]; addQuickPlay(delegate, 'run') }
         // Manual validation client: real Curios and the dev-only head slot, no scripted smoke.
         clientValidate { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-validate'); addQuickPlay(delegate, 'run-client-validate') }
@@ -69,7 +90,7 @@ neoForge {
         multiplayerB { client(); sourceSet = sourceSets.smoke; loadedMods = [mods.bestflashlightSmoke]; gameDirectory = file('run-client-b'); systemProperty 'bestflashlight.multiplayer.client', 'true'; programArgument '--username'; programArgument 'FlashlightB' }
         configureEach { systemProperty 'neoforge.enabledGameTestNamespaces', 'bestflashlight'; logLevel = org.slf4j.event.Level.INFO }
     }
-    unitTest { enable(); testedMod = mods.bestflashlightSmoke }
+    unitTest { enable(); testedMod = mods.bestflashlightSmoke; loadedMods = [mods.bestflashlightSmoke] }
 }
 tasks.named('test', Test) { useJUnitPlatform(); systemProperty 'bestflashlight.projectDir', projectDir.absolutePath }
 
@@ -91,7 +112,7 @@ tasks.named('test', Test) { useJUnitPlatform(); systemProperty 'bestflashlight.p
 }
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 tasks.withType(AbstractArchiveTask).configureEach { preserveFileTimestamps = false; reproducibleFileOrder = true }
-tasks.named('jar', Jar) { from('LICENSE'); from('NOTICE'); manifest { attributes 'Implementation-Version': project.version } }
+tasks.named('jar', Jar) { includeEmptyDirs = false; from('LICENSE'); from('NOTICE'); manifest { attributes 'Implementation-Version': project.version } }
 
 // Export launches so the dedicated server and two clients can run concurrently
 // without holding one Gradle build open while starting another.
@@ -137,4 +158,31 @@ tasks.register('prepareBeamSmoke') {
         def command = [javaPath, '-Xmx2G', '-cp', runTask.classpathProvider.asPath] + runTask.allJvmArgs + runTask.args
         file('build/beamClientSmoke-command.json').text = groovy.json.JsonOutput.toJson(command)
     }
+}
+
+// Runtime matrix deliberately excludes smoke classes that directly depend on Curios/IE.
+tasks.named('runCompatibilityClient') {
+    doFirst {
+        def dir = file(compatRunDir)
+        dir.mkdirs()
+        def modDir = new File(dir, 'mods')
+        modDir.mkdirs()
+        delete fileTree(modDir) { include 'lambdynamiclights-*.jar' }
+        if (compatLdl) {
+            if (configurations.beamSmokeRuntime.files.size() != 1)
+                throw new GradleException('Set -PbeamSmokeModDir to exactly one real LDL jar')
+            copy { from configurations.beamSmokeRuntime; into modDir }
+        }
+        // Only this named fixture world is disposable; user worlds are untouched.
+        delete new File(dir, 'saves/Flashlight-compatibility')
+        def muted = ['master','music','record','weather','block','hostile','neutral','player','ambient','voice']
+            .collect { "soundCategory_${it}:0" }
+        new File(dir, 'options.txt').text = (['onboardAccessibility:false','pauseOnLostFocus:false',
+            'renderDistance:4','simulationDistance:5','maxFps:60','overrideWidth:960','overrideHeight:640'] + muted).join('\n') + '\n'
+    }
+}
+
+// Remove a previous head fixture when switching the same checkout to absent/empty.
+tasks.named('processCompatibilityResources', ProcessResources) {
+    doFirst { delete destinationDir }
 }

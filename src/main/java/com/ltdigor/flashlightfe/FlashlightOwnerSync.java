@@ -2,6 +2,7 @@ package com.ltdigor.flashlightfe;
 
 import com.ltdigor.flashlightfe.mixin.AbstractContainerMenuAccessor;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
@@ -13,11 +14,20 @@ public final class FlashlightOwnerSync {
     private FlashlightOwnerSync() {}
 
     public static void syncDrain(ServerPlayer player, LampSource source) {
-        if (player instanceof FakePlayer || source.headMounted() || player.isCreative()
+        if (player instanceof FakePlayer || player.isCreative()
             || FlashlightConfig.ENERGY_PER_TICK.get() <= 0.0) return;
-        if (!player.connection.hasChannel(FlashlightNetwork.HandheldEnergy.TYPE)) return;
 
         ItemStack current = source.stack();
+        if (source.headMounted()) {
+            if (current == player.getItemBySlot(EquipmentSlot.HEAD)
+                && player.connection.hasChannel(FlashlightNetwork.HeadlampEnergy.TYPE)) {
+                advanceOnlyEnergy(player.containerMenu, current);
+                PacketDistributor.sendToPlayer(player,
+                    new FlashlightNetwork.HeadlampEnergy(-1, LampEnergy.stored(current)));
+            }
+            return;
+        }
+        if (!player.connection.hasChannel(FlashlightNetwork.HandheldEnergy.TYPE)) return;
         advanceOnlyEnergy(player.containerMenu, current);
 
         int inventorySlot = source.offHand() ? Inventory.SLOT_OFFHAND : player.getInventory().selected;

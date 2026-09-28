@@ -129,7 +129,7 @@ def models():
     button = box('button', (7.25, 9.55, 8.4), (8.75, 10.5, 10.1), 'orange',
                  ('north', 'south', 'east', 'west', 'up'))
     button['faces']['up'] = face('power')
-    band_display = {
+    headlamp_display = {
         'gui': transform((24, 145, 0), (0, -5.5, 0), 1.12),
         'ground': transform((0, 0, 0), (0, -1.5, 0), .55),
         'fixed': transform((0, 180, 0), (0, -5.5, 0), 1),
@@ -137,7 +137,9 @@ def models():
         'firstperson_lefthand': transform((0, 30, 0), (0, -3.5, 0), .6),
         'thirdperson_righthand': transform((75, 0, 0), (0, 1, -3), .6),
         'thirdperson_lefthand': transform((75, 0, 0), (0, 1, -3), .6),
-        'head': transform((0, 180, 0), (0, -1, 0), 1)}
+        # CustomHeadLayer scales item coordinates by .625; 1.6 restores block-model
+        # scale so the strap clears the 8px-wide outer skin. Y compensates layer offset.
+        'head': transform((0, 0, 0), (0, -6.4, 0), 1.6)}
     band = [box('strap_front', (3.25, 13, 3.25), (12.75, 14.5, 3.45), 'strap'),
             box('strap_back', (3.25, 13, 12.55), (12.75, 14.5, 12.75), 'strap'),
             box('strap_left', (3.25, 13, 3.45), (3.45, 14.5, 12.55), 'strap', ('up', 'down', 'west', 'east')),
@@ -146,7 +148,7 @@ def models():
             box('hinge_left', (5.85, 13.2, 2.65), (6.35, 14.5, 3.15), 'steel'),
             box('hinge_right', (9.65, 13.2, 2.65), (10.15, 14.5, 3.15), 'steel'),
             box('strap_buckle', (12.77, 12.85, 10.1), (13.05, 14.65, 11.3), 'rubber')]
-    loaded = (copy.deepcopy(band) + shell('housing', 8, 13.9, 1.65, 1.55, 2.97, 'housing')
+    headlamp = (band + shell('housing', 8, 13.9, 1.65, 1.55, 2.97, 'housing')
               + [cap('housing_back', 8, 13.9, 1.65, 2.97, 'cap', 'south')]
               + optic(8, 13.9, 1.8, 1.25, 1.9)
               + [box('head_switch', (7.55, 15.45, 2.05), (8.45, 15.7, 2.7), 'orange',
@@ -161,13 +163,10 @@ def models():
         'flashlight_off': model(hand, hand_display),
         'flashlight_on': lit('flashlight_off', hand),
         'flashlight_button': model([button]),
-        'headband': {'parent': 'bestflashlight:item/headband_empty', 'overrides': [
-            {'predicate': {'bestflashlight:mounted': 1}, 'model': 'bestflashlight:item/headband_loaded'},
-            {'predicate': {'bestflashlight:mounted': 1, 'bestflashlight:enabled': 1},
-             'model': 'bestflashlight:item/headband_loaded_on'}]},
-        'headband_empty': model(band, band_display),
-        'headband_loaded': {**model(loaded), 'parent': 'bestflashlight:item/headband_empty'},
-        'headband_loaded_on': lit('headband_loaded', loaded)}
+        'headlamp': {'parent': 'bestflashlight:item/headlamp_off', 'overrides': [
+            {'predicate': {'bestflashlight:enabled': 1}, 'model': 'bestflashlight:item/headlamp_on'}]},
+        'headlamp_off': model(headlamp, headlamp_display),
+        'headlamp_on': lit('headlamp_off', headlamp)}
 
 
 def octagon(x, y, radius):

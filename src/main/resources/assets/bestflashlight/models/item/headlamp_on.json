@@ -1,5 +1,5 @@
 {
-  "parent": "bestflashlight:item/headband_loaded",
+  "parent": "bestflashlight:item/headlamp_off",
   "textures": {"lens":"bestflashlight:item/industrial_on"},
   "elements": [
     {"name":"strap_front","from":[3.25,13,3.25],"to":[12.75,14.5,3.45],"faces":{"north":{"uv":[4,4,8,8],"texture":"#atlas"},"south":{"uv":[4,4,8,8],"texture":"#atlas"},"east":{"uv":[4,4,8,8],"texture":"#atlas"},"west":{"uv":[4,4,8,8],"texture":"#atlas"},"up":{"uv":[4,4,8,8],"texture":"#atlas"},"down":{"uv":[4,4,8,8],"texture":"#atlas"}}},

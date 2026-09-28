@@ -27,6 +27,7 @@ import top.theillusivec4.curios.api.CuriosApi;
 public class WallAndHeadlampRegressionGameTests {
     @GameTest(template = "empty", batch = "beam_near_wall")
     public static void handheldDoesNotSwitchOffWhenEmitterOverlapsNearbyWall(GameTestHelper helper) {
+        double previousEnergyRate = FlashlightConfig.ENERGY_PER_TICK.get();
         useLegacyEnergyRate();
         ServerLevel level = helper.getLevel();
         ServerPlayer player = new FakePlayer(level, new GameProfile(UUID.randomUUID(), "wall-handheld"));
@@ -50,6 +51,7 @@ public class WallAndHeadlampRegressionGameTests {
             helper.assertTrue(countTemporaryLights(helper) > 0,
                 "A wall-overlapping handheld emitter must keep at least one temporary light source");
         } finally {
+            restoreEnergyRate(previousEnergyRate);
             FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
@@ -59,7 +61,8 @@ public class WallAndHeadlampRegressionGameTests {
     }
 
     @GameTest(template = "empty", batch = "beam_headlamp_direction")
-    public static void headbandPlacesBrightSourcesOnlyAtForwardBeamTerminals(GameTestHelper helper) {
+    public static void headlampPlacesBrightSourcesOnlyAtForwardBeamTerminals(GameTestHelper helper) {
+        double previousEnergyRate = FlashlightConfig.ENERGY_PER_TICK.get();
         ServerLevel level = helper.getLevel();
         ServerPlayer player = new FakePlayer(level, new GameProfile(UUID.randomUUID(), "headlamp-direction"));
         try {
@@ -69,15 +72,15 @@ public class WallAndHeadlampRegressionGameTests {
 
             ItemStack lamp = chargedLamp(50);
             LampData.setEnabled(lamp, true);
-            ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get());
-            LampData.mount(band, lamp);
+            ItemStack band = new ItemStack(FlashlightMod.HEADLAMP.get());
+            com.ltdigor.flashlightfe.TestLamps.copyState(band, lamp);
 
             var inventory = CuriosApi.getCuriosInventory(player).orElseThrow();
             var head = inventory.getCurios().get("head");
             helper.assertTrue(head != null && head.getStacks().getSlots() > 0,
-                "Player must have a Curios head slot for the headband");
+                "Player must have a Curios head slot for the headlamp");
             helper.assertTrue(head.getStacks().insertItem(0, band, false).isEmpty(),
-                "Loaded headband must equip into the Curios head slot");
+                "Loaded headlamp must equip into the Curios head slot");
 
             FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
@@ -94,6 +97,7 @@ public class WallAndHeadlampRegressionGameTests {
             helper.assertTrue(maxTemporaryLightLevel(helper) == 15,
                 "Far forward headlamp terminals must remain bright enough to illuminate the target");
         } finally {
+            restoreEnergyRate(previousEnergyRate);
             FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
@@ -103,7 +107,8 @@ public class WallAndHeadlampRegressionGameTests {
     }
 
     @GameTest(template = "empty", batch = "beam_near_wall")
-    public static void headbandKeepsDimFallbackWhenLookingIntoNearbyWall(GameTestHelper helper) {
+    public static void headlampKeepsDimFallbackWhenLookingIntoNearbyWall(GameTestHelper helper) {
+        double previousEnergyRate = FlashlightConfig.ENERGY_PER_TICK.get();
         useLegacyEnergyRate();
         ServerLevel level = helper.getLevel();
         ServerPlayer player = new FakePlayer(level, new GameProfile(UUID.randomUUID(), "wall-headlamp"));
@@ -117,13 +122,13 @@ public class WallAndHeadlampRegressionGameTests {
 
             ItemStack lamp = chargedLamp(20);
             LampData.setEnabled(lamp, true);
-            ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get());
-            LampData.mount(band, lamp);
+            ItemStack band = new ItemStack(FlashlightMod.HEADLAMP.get());
+            com.ltdigor.flashlightfe.TestLamps.copyState(band, lamp);
 
             var inventory = CuriosApi.getCuriosInventory(player).orElseThrow();
             var head = inventory.getCurios().get("head");
             helper.assertTrue(head != null && head.getStacks().insertItem(0, band, false).isEmpty(),
-                "Loaded headband must equip into the Curios head slot");
+                "Loaded headlamp must equip into the Curios head slot");
             ItemStack equipped = head.getStacks().getStackInSlot(0);
 
             FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(player));
@@ -136,6 +141,7 @@ public class WallAndHeadlampRegressionGameTests {
             helper.assertTrue(maxTemporaryLightLevel(helper) <= 4,
                 "Close-wall fallback must stay dim enough not to recreate a 360-degree halo");
         } finally {
+            restoreEnergyRate(previousEnergyRate);
             FlashlightServerEvents.onPlayerLoggedOut(new PlayerEvent.PlayerLoggedOutEvent(player));
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
@@ -152,6 +158,11 @@ public class WallAndHeadlampRegressionGameTests {
 
     private static void useLegacyEnergyRate() {
         FlashlightConfig.ENERGY_PER_TICK.set(1.0);
+        FlashlightConfig.ENERGY_PER_TICK.clearCache();
+    }
+
+    private static void restoreEnergyRate(double energyRate) {
+        FlashlightConfig.ENERGY_PER_TICK.set(energyRate);
         FlashlightConfig.ENERGY_PER_TICK.clearCache();
     }
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run two real clients against an isolated loopback-only development server."""
+import argparse
 import json
 import shutil
 import subprocess
@@ -11,9 +12,18 @@ BUILD = ROOT / 'build'
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--ldl-dir', type=Path, help='Real LDL jar directory; only client A receives LDL')
+    args = parser.parse_args()
+    ldl = None
+    if args.ldl_dir:
+        jars = list(args.ldl_dir.glob('lambdynamiclights-*.jar'))
+        if len(jars) != 1:
+            parser.error('--ldl-dir must contain exactly one LDL jar')
+        ldl = jars[0].resolve()
     BUILD.mkdir(exist_ok=True)
     with (BUILD / 'multiplayer-prepare.log').open('w') as log:
-        subprocess.run([str(ROOT / 'gradlew'), 'prepareMultiplayerSmoke'], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
+        subprocess.run([str(ROOT / 'gradlew'), '--offline', 'prepareMultiplayerSmoke'], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
     server_dir = ROOT / 'run-multiplayer-server'
     server_dir.mkdir(exist_ok=True)
     # Delete only this script's explicitly named disposable world.
@@ -26,11 +36,20 @@ def main():
     def launch(name, directory):
         directory.mkdir(exist_ok=True)
         if name != 'multiplayerServer':
-            (directory / 'options.txt').write_text('onboardAccessibility:false\nskipMultiplayerWarning:true\nrenderDistance:2\nsimulationDistance:5\npauseOnLostFocus:false\n')
+            (directory / 'options.txt').write_text('onboardAccessibility:false\nskipMultiplayerWarning:true\nrenderDistance:2\nsimulationDistance:5\npauseOnLostFocus:false\n' +
+                ''.join(f'soundCategory_{category}:0\n' for category in ('master','music','record','weather','block','hostile','neutral','player','ambient','voice')))
+            mods = directory / 'mods'
+            mods.mkdir(exist_ok=True)
+            for old in mods.glob('lambdynamiclights-*.jar'):
+                old.unlink()
+            if ldl and name == 'multiplayerA':
+                shutil.copy2(ldl, mods / ldl.name)
         output = BUILD / f'{name}.log'
         stream = output.open('w')
         logs.append(stream)
         command = json.loads((BUILD / f'{name}-command.json').read_text())
+        command.insert(1, f'-Dbestflashlight.multiplayer.ldl={str(bool(ldl and name == "multiplayerA")).lower()}')
+        command.insert(1, f'-Dbestflashlight.multiplayer.mixed={str(bool(ldl)).lower()}')
         proc = subprocess.Popen(command, cwd=directory, stdout=stream, stderr=subprocess.STDOUT)
         processes.append(proc)
         return proc, output
@@ -56,6 +75,9 @@ def main():
         for name in ('multiplayerA', 'multiplayerB'):
             assert 'FLASHLIGHT_REMOTE_CLIENT_PASS' in (BUILD / f'{name}.log').read_text(), f'{name}: remote Curios synchronization failed'
             assert 'FLASHLIGHT_PRESS_CLIENT_PASS' in (BUILD / f'{name}.log').read_text(), f'{name}: sender/tracking handheld animation event failed'
+        if ldl:
+            for name in ('multiplayerA', 'multiplayerB'):
+                assert 'FLASHLIGHT_MIXED_BACKEND_PASS' in (BUILD / f'{name}.log').read_text(), f'{name}: mixed backend unverified'
         print('PASS: dedicated server, two real clients, sender/tracking press animation, creative/survival FE, overlap, death, unequip, dimensions, logout, water restoration.', flush=True)
     finally:
         for proc in processes:

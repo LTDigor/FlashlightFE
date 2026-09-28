@@ -91,16 +91,25 @@ public class BeamGameTests {
         ServerPlayer player = geometryPlayer(level, origin, GameType.CREATIVE);
         try {
             setBeamConfig(12.0, 30.0);
+            BlockPos blockedOuter = helper.absolutePos(new BlockPos(6, 2, 13));
+            BlockPos farCenter = helper.absolutePos(new BlockPos(8, 2, 13));
+            BlockPos openOuter = helper.absolutePos(new BlockPos(10, 2, 13));
+            Map<BlockPos, Integer> clear = computeBeam(player, level, origin, new Vec3(0.0, 0.0, 1.0));
+            helper.assertTrue(clear.getOrDefault(blockedOuter, 0) > 0,
+                "Interior left ray must be lit before adding the obstacle");
+            helper.assertTrue(clear.getOrDefault(openOuter, 0) > 0,
+                "Interior right ray must be lit before adding the obstacle");
+            helper.assertTrue(clear.getOrDefault(farCenter, 0) > 0,
+                "Center ray must be lit before adding the obstacle");
+
             helper.setBlock(7, 2, 8, Blocks.STONE);
-
             Map<BlockPos, Integer> beam = computeBeam(player, level, origin, new Vec3(0.0, 0.0, 1.0));
-            BlockPos blockedOuter = helper.absolutePos(new BlockPos(5, 2, 14));
-            BlockPos farCenter = helper.absolutePos(new BlockPos(8, 2, 14));
-            BlockPos openOuter = helper.absolutePos(new BlockPos(11, 2, 14));
 
-            helper.assertTrue(!beam.containsKey(blockedOuter), "Off-axis obstacle must block the outer-ring candidate behind it");
-            helper.assertTrue(beam.containsKey(farCenter), "Off-axis obstacle must leave the far center ray open");
-            helper.assertTrue(beam.containsKey(openOuter), "Off-axis obstacle must leave the opposite outer-ring ray open");
+            helper.assertTrue(!beam.containsKey(blockedOuter), "Off-axis obstacle must block its lit ray behind it");
+            helper.assertTrue(clear.get(farCenter).equals(beam.get(farCenter)),
+                "Off-axis obstacle must leave the far center ray unchanged");
+            helper.assertTrue(clear.get(openOuter).equals(beam.get(openOuter)),
+                "Off-axis obstacle must leave the opposite lit ray unchanged");
         } finally {
             setBeamConfig(originalRange, originalAngle);
             player.discard();
@@ -196,7 +205,7 @@ public class BeamGameTests {
         ServerLevel level = helper.getLevel();
         ServerPlayer bright = geometryPlayer(level, helper.absoluteVec(new Vec3(8.5, 2.5, 6.5)), GameType.SURVIVAL);
         ServerPlayer dim = geometryPlayer(level, helper.absoluteVec(new Vec3(8.5, 2.5, 2.5)), GameType.SURVIVAL);
-        BlockPos target = helper.absolutePos(new BlockPos(8, 4, 9));
+        BlockPos target = helper.absolutePos(new BlockPos(8, 3, 11));
         try {
             ItemStack brightLamp = chargedLamp(60);
             ItemStack dimLamp = chargedLamp(60);
@@ -211,13 +220,16 @@ public class BeamGameTests {
 
             FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(bright));
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
+            reconcile(level);
+            helper.assertTrue(level.getBlockState(target).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
+                "Closer source must light the overlap target by itself");
+            int brightOnly = level.getBlockState(target).getValue(TransientLightBlock.LEVEL);
             FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(dim));
             ServerBeamLightingManager.get().endServerTick(helper.getLevel().getServer());
             reconcile(level);
             helper.assertTrue(level.getBlockState(target).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
                 "Overlapping beams must share one carrier");
             int shared = level.getBlockState(target).getValue(TransientLightBlock.LEVEL);
-            helper.assertTrue(shared >= 12, "Shared carrier must use the brighter frame, got " + shared);
 
             LampData.setEnabled(brightLamp, false);
             FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(bright));
@@ -226,8 +238,11 @@ public class BeamGameTests {
             helper.assertTrue(level.getBlockState(target).is(FlashlightMod.FLASHLIGHT_LIGHT.get()),
                 "Losing the brighter source must keep the carrier for the remaining beam");
             int downgraded = level.getBlockState(target).getValue(TransientLightBlock.LEVEL);
-            helper.assertTrue(downgraded < shared && downgraded > 0,
-                "Remaining source must downgrade the shared carrier in place, got " + downgraded);
+            helper.assertTrue(brightOnly > downgraded && downgraded > 0,
+                "Target must distinguish stronger and weaker source levels, got " + brightOnly + " and " + downgraded);
+            helper.assertTrue(shared == Math.max(brightOnly, downgraded),
+                "Shared carrier must use the maximum single-source level, got " + shared
+                    + " versus " + brightOnly + " and " + downgraded);
 
             LampData.setEnabled(dimLamp, false);
             FlashlightServerEvents.onPlayerTick(new PlayerTickEvent.Post(dim));
@@ -517,8 +532,8 @@ public class BeamGameTests {
             player.setXRot(0.0F);
             var head = CuriosApi.getCuriosInventory(player).orElseThrow().getCurios().get("head");
             helper.assertTrue(head != null, "Dev fixture must provide the head slot");
-            ItemStack band = new ItemStack(FlashlightMod.HEADBAND.get());
-            LampData.mount(band, chargedLamp(60));
+            ItemStack band = new ItemStack(FlashlightMod.HEADLAMP.get());
+            com.ltdigor.flashlightfe.TestLamps.copyState(band, chargedLamp(60));
             LampData.setEnabled(band, true);
             head.getStacks().setStackInSlot(0, band);
 
