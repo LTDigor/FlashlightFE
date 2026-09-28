@@ -9,6 +9,7 @@
     "AbstractContainerMenuAccessor",
     "FlowingFluidMixin"
   ],
+  "client": ["IrisProgramSourceMixin", "IrisUniformsMixin", "IrisPipelineMixin"],
   "injectors": {
     "defaultRequire": 1
   }

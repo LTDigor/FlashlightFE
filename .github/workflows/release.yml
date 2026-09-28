@@ -27,7 +27,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Test release safeguards (including private/disabled builds)
+      - name: Install image acceptance test dependencies
+        run: python3 -m pip install -r scripts/requirements-test.txt
+      - name: Test release safeguards and spotlight image analyzer
         run: python3 -m unittest discover -s scripts -p '*_test.py'
       - name: Build and compile smoke tests
         run: ./gradlew --no-daemon build smokeClasses

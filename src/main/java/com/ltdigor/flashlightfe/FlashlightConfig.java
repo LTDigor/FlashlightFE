@@ -27,7 +27,7 @@ public final class FlashlightConfig {
         BEAM_RANGE = b.comment("Дальность луча в блоках. Мягкое рассеяние света Minecraft выходит за геометрию луча.")
             .worldRestart().defineInRange("beamRange", 12.0, 1.0, 32.0);
         CONE_ANGLE_DEGREES = b.comment("Полный угол конуса в градусах (не половина). Меньше угол — уже луч.")
-            .worldRestart().defineInRange("coneAngleDegrees", 35.0, 1.0, 90.0);
+            .worldRestart().defineInRange("coneAngleDegrees", 50.0, 1.0, 90.0);
         BEAM_BRIGHTNESS = b.comment("Максимальная яркость луча (уровень света 1–15).")
             .worldRestart().defineInRange("beamBrightness", 15, 1, 15);
         BEAM_SOFTNESS = b.comment("Мягкость края луча: 0 — чёткий круг, 1 — плавное затухание от центра.")

@@ -68,9 +68,25 @@ final class OptionalDynamicLights {
 
     private OptionalDynamicLights() {}
 
+    static boolean dynamicBeamMode() {
+        return available && !serverFallbackEnabled && isDynamicLightingEnabled();
+    }
+
+    /** Render-time handoff: camera changes can happen between client ticks. */
+    static boolean releaseLocalCone(Player player) {
+        DynamicCone cone = CONES.remove(player.getUUID());
+        if (cone != null && !removeCone(cone)) {
+            disable();
+            return false;
+        }
+        return dynamicBeamMode();
+    }
+
     static void register() {
         NeoForge.EVENT_BUS.addListener(OptionalDynamicLights::fallbackMode);
         NeoForge.EVENT_BUS.addListener(OptionalDynamicLights::renderFrame);
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event)
+            -> ShaderBeamBridge.clearWorld());
     }
 
     static void clientTick() {
@@ -200,6 +216,7 @@ final class OptionalDynamicLights {
 
         for (Player player : client.level.players()) {
             if (!player.isAlive() || player.isSpectator()) continue;
+            if (player == client.player && ShaderBeamBridge.replacesLocalCone()) continue;
             if (player != client.player && player.distanceToSqr(client.player) > maxDistanceSqr) continue;
 
             Vec3 look = player.getLookAngle();
@@ -207,13 +224,7 @@ final class OptionalDynamicLights {
             look = look.normalize();
             Vec3 eye = player.getEyePosition();
 
-            Vec3 selectionLook = look;
-            Vec3 selectionEye = eye;
-            LampSource source = LampSource.select(player, candidate -> {
-                if (!LampEnergy.hasPower(candidate.stack(), player)) return false;
-                Vec3 candidateEmitter = emitterOrigin(player, candidate, selectionLook, selectionEye);
-                return FlashlightConfig.WORKS_UNDERWATER.get() || !isSubmerged(client.level, candidateEmitter);
-            });
+            LampSource source = selectSource(client.level, player, look, eye);
             if (source == null) continue;
 
             Vec3 emitter = emitterOrigin(player, source, look, eye);
@@ -258,6 +269,12 @@ final class OptionalDynamicLights {
         BlockHitResult hit = level.clip(new ClipContext(
             eye, emitter, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
         return hit.getType() == HitResult.Type.MISS;
+    }
+
+    static LampSource selectSource(ClientLevel level, Player player, Vec3 look, Vec3 eye) {
+        return LampSource.select(player, candidate -> LampEnergy.hasPower(candidate.stack(), player)
+            && (FlashlightConfig.WORKS_UNDERWATER.get()
+                || !isSubmerged(level, emitterOrigin(player, candidate, look, eye))));
     }
 
     private static Vec3 emitterOrigin(Player player, LampSource source, Vec3 look, Vec3 eye) {
